@@ -15,6 +15,10 @@ app.use(express.json());
 
 app.use('/api/auth', authRoutes);
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Auth service is running' });
+});
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -24,7 +28,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3010;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

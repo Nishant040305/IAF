@@ -1,28 +1,13 @@
-
-![Icon](https://github.com/user-attachments/assets/be609a21-1d26-42ce-a1e5-685a6f3531cc)
 # VayuReader 📚
 
-
-> A comprehensive multi-platform solution for PDF management, document search, and content discovery
+> A comprehensive multi-platform solution for PDF management, document search, and content discovery with advanced authentication and admin management
 
 [![React Native](https://img.shields.io/badge/React%20Native-0.72-blue.svg?logo=react)](https://reactnative.dev/)
 [![Expo](https://img.shields.io/badge/Expo-49.0.0-black.svg?logo=expo)](https://expo.dev/)
-[![NativeWind](https://img.shields.io/badge/NativeWind-Tailwind%20for%20RN-blueviolet)](https://www.nativewind.dev/)
-[![React Navigation](https://img.shields.io/badge/React%20Navigation-v6-blue.svg?logo=react)](https://reactnavigation.org/)
-[![Axios](https://img.shields.io/badge/Axios-HTTP%20Client-5A29E4.svg?logo=axios)](https://axios-http.com/)
 [![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg?logo=node.js)](https://nodejs.org/)
 [![Express.js](https://img.shields.io/badge/Express.js-Backend%20Framework-black.svg)](https://expressjs.com/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-6.0-green.svg?logo=mongodb)](https://www.mongodb.com/)
-[![Mongoose](https://img.shields.io/badge/Mongoose-ODM-880000.svg)](https://mongoosejs.com/)
 [![JWT](https://img.shields.io/badge/JWT-Authentication-orange.svg?logo=jsonwebtokens)](https://jwt.io/)
-[![Multer](https://img.shields.io/badge/Multer-File%20Upload-blue.svg)](https://github.com/expressjs/multer)
-[![bcrypt](https://img.shields.io/badge/bcrypt-Password%20Hashing-yellowgreen)](https://github.com/kelektiv/node.bcrypt.js)
-[![Docker](https://img.shields.io/badge/Docker-Container-blue?logo=docker&logoColor=white)](https://www.docker.com/)
-[![React](https://img.shields.io/badge/React-18.x-61DAFB.svg?logo=react)](https://react.dev/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.x-38B2AC.svg?logo=tailwindcss)](https://tailwindcss.com/)
-[![React Router](https://img.shields.io/badge/React%20Router-v6-critical.svg?logo=reactrouter)](https://reactrouter.com/)
-[![Kotlin](https://img.shields.io/badge/Kotlin-1.9.10-blue.svg?logo=kotlin)](https://kotlinlang.org/)
-
 
 VayuReader is a powerful, multi-module platform designed for seamless PDF document management, intelligent search capabilities, and comprehensive content organization. The platform combines a mobile-first approach with robust backend services and an intuitive admin dashboard.
 
@@ -34,8 +19,11 @@ VayuReader is a powerful, multi-module platform designed for seamless PDF docume
 - 🔍 **Intelligent PDF Search** - Advanced search engine with full-text indexing
 - 📖 **Dictionary Integration** - Built-in dictionary with synonyms and antonyms  
 - 🔤 **Abbreviation Management** - Comprehensive abbreviation lookup system
-- 🔐 **Secure Authentication** - JWT-based user authentication and authorization
-- 👨‍💼 **Admin Dashboard** - Web-based content management interface
+- 🔐 **Secure Authentication** - OTP-based user authentication and JWT-based admin authentication
+- 👨‍💼 **Admin Dashboard** - Web-based content management interface with role-based access
+- 👥 **Sub-Admin Management** - Super admin can create and manage sub-admins
+- 📊 **Audit Logging** - Complete activity tracking for all admin actions
+- 🔒 **Role-Based Access Control** - Users (read-only), Admins (full access)
 - ☁️ **Cloud-Ready** - Scalable microservices architecture
 
 ---
@@ -49,8 +37,8 @@ VayuReader is a powerful, multi-module platform designed for seamless PDF docume
 │                     │    │                     │    │                     │
 │ • PDF Viewer        │    │ • PDF Search        │    │ • Content Management│
 │ • Search Interface  │    │ • Authentication    │    │ • User Management   │
-│ • Dictionary        │    │ • Abbreviations     │    │ • File Operations   │
-│ • Abbreviations     │    │ • Dictionary API    │    │ • Admin Tools       │
+│ • Dictionary        │    │ • Abbreviations     │    │ • Sub-Admin Mgmt    │
+│ • Abbreviations     │    │ • Dictionary API    │    │ • Audit Logs        │
 └─────────────────────┘    └─────────────────────┘    └─────────────────────┘
                                       │
                                       ▼
@@ -59,10 +47,6 @@ VayuReader is a powerful, multi-module platform designed for seamless PDF docume
                            │   (Database)        │
                            └─────────────────────┘
 ```
-
-## Application View 
-
-![App](./VayuReader_Frontend/assets/images/application_view1.png)
 
 ---
 
@@ -77,16 +61,25 @@ VayuReader/
 │   └── assets/                      # Images, fonts, etc.
 │
 ├── 🖥️ VayuReader_Backend/           # Backend Services
-│   ├── pdf-search-engine/           # PDF management & search
-│   ├── abrebiations/                # Abbreviation API
-│   ├── dictionary-api/              # Dictionary service
-│   ├── auth/                        # Authentication service
+│   ├── pdf-search-engine/           # PDF management & search (Port 3005)
+│   ├── abrebiations/                # Abbreviation API (Port 3001)
+│   ├── dictionary-api/              # Dictionary service (Port 3000)
+│   ├── auth/                        # User OTP authentication (Port 3010)
+│   ├── admin_auth/                  # Admin authentication & management (Port 3012)
+│   │   ├── middleware/              # Unified authentication middleware
+│   │   ├── controllers/             # Sub-admin management
+│   │   ├── models/                  # Audit logs, Sub-admins
+│   │   └── routes/                  # Audit routes, Sub-admin routes
 │   └── shared/                      # Common utilities
 │
 └── 🌐 VayuReader_AdminDashboard/    # Web Admin Interface
     ├── frontend/                    # React dashboard
-    ├── components/                  # Dashboard components
-    └── services/                    # Admin API calls
+    │   ├── components/              # Dashboard components
+    │   │   ├── ManageAbbreviations.jsx
+    │   │   ├── ManagePDFs.jsx
+    │   │   ├── ManageDictionaryWords.jsx
+    │   │   └── ManageSubAdmins.jsx
+    │   └── services/                # Admin API calls
 ```
 
 ---
@@ -99,11 +92,11 @@ VayuReader/
 - MongoDB 6.0+ (or MongoDB Atlas)
 - Expo CLI
 - Git
-- Docker & Docker Compose (for containerized deployment)
+- Docker & Docker Compose (optional, for containerized deployment)
 
 ---
 
-### Installation (Manual)
+### Installation
 
 1. **Clone the repository**
    ```bash
@@ -112,144 +105,51 @@ VayuReader/
    ```
 
 2. **Backend Setup**
+
+   Each service needs to be set up individually:
+
    ```bash
-   # PDF Search Engine
-   cd VayuReader_Backend/pdf-search-engine
+   # 1. Auth Service (User OTP Authentication)
+   cd VayuReader_Backend/auth
    npm install
-   cp .env.example .env
-   # Configure your environment variables
-   npm run dev
-   
-   # Authentication Service
-   cd ../auth
+   cp env.sample .env
+   # Edit .env with your MongoDB URI and JWT_SECRET
+   npm run dev  # Runs on port 3010
+
+   # 2. Admin Auth Service
+   cd ../admin_auth
    npm install
-   cp .env.example .env
-   npm run dev
-   
-   # Repeat for other services...
+   # Create .env file (see Configuration section)
+   npm run dev  # Runs on port 3012
+
+   # 3. Abbreviations Service
+   cd ../abrebiations
+   npm install
+   # Create .env with MONGODB_URI
+   npm run dev  # Runs on port 3001
+
+   # 4. PDF Search Engine
+   cd ../pdf-search-engine
+   npm install
+   # Create .env with MONGODB_URI
+   npm run dev  # Runs on port 3005
+
+   # 5. Dictionary API
+   cd ../dictionary-api
+   npm install
+   # Create .env with MONGODB_URI
+   npm run dev  # Runs on port 3000
    ```
 
-3. **Frontend Setup**
-   📋 What You Need Before Starting
-  1. An Android phone
-  2. A laptop or PC where the project is set up
-  3. Make sure both phone and laptop are connected to the same Wi-Fi or hotspot
-
-  ###  Step-by-Step Instructions (Manual)
-
-  1. **Step 1: Install the App on Your Phone**
-   ```bash
-   a. Open this link on your Android phone:https://expo.dev/accounts/aryaman97/projects/IAF/builds/6f6c305f-38a8-4136-9e43-4da51b6dac02
-   b. Download the file (you may need to allow your browser to download unknown apps)
-   c. Tap the downloaded file and click "Install"
-   ```
-
-   2. **Step 2: Start the App from the Laptop (Only needed the first time or after changes)**
-   ```bash
-   
-   a. Open the project folder on your laptop where the app code is (the folder is usually called VayuReader_Frontend)
-   b. Right-click inside the folder and choose “Open Terminal”
-   c. Run the following command in the terminal: npx expo start --dev-client
-
-   ```
-
-   3. **Step 3: Open the App on Your Phone**
-   ```bash
-   Case A: Auto Connect (Recommended)
-   a. You’ll see something like this in the terminal or browser: exp://192.168.205.128:8081
-   b. Now, just open the VayuReader app on your phone.
-   c. If everything works, it will automatically connect and load the app.
-
-  Case B: Manual Connect (If App Doesn't Load Automatically)
-  If the app shows a blank screen or doesn't load anything:
-   a. Ensure the server is still running on your laptop: npx expo start --dev-client
-   b. From the terminal or browser, copy the full connection link. It will look like this: exp+iaf://expo-development-client/?url=http%3A%2F%2F192.168.205.128%3A8081
-  c. Manually enter that link in the App
-
-
-   ```
-  4. **Step 4: What to Do If You Update the Code**
-   ```bash
-   a. No need to reinstall the app
-   b. Just repeat Step 2 (npx expo start --dev-client) on the laptop
-   c. Open the app again on your phone — it will automatically update
-
-   ```
-   5. **Step 5: When to Rebuild the App (for developers)**
-   ```bash
-   You only need to create a new APK if:
-   a. You added native features like PDF viewer
-   b. You want to give the app to someone who doesn't have access to the laptop/local server
-   To rebuild: eas build --platform android --profile development
-
-   ```
-
-
-4. **Admin Dashboard Setup**
+3. **Admin Dashboard Setup**
    ```bash
    cd VayuReader_AdminDashboard/frontend
    npm install
    npm start
    ```
 
----
-
-### 🐳 Dockerized Backend (Recommended)
-
-#### 1. **Configure Environment Variables**
-
-Create `.env` files in each backend service directory (see `.env.example` for reference).
-
-#### 2. **Build and Run All Backend Services**
-
-From the `VayuReader_Backend` directory:
-
-```bash
-docker-compose up --build
-```
-
-This will build and start all backend services as Docker containers.
-
-#### 3. **Access Services**
-
-- Abbreviations API: [http://localhost:4000/api/abbreviations/all](http://localhost:4000/api/abbreviations/all)
-- PDF Search Engine: [http://localhost:4001/](http://localhost:4001/)
-- Dictionary API: [http://localhost:4002/](http://localhost:4002/)
-- Auth API: [http://localhost:4003/](http://localhost:4003/)
-
-#### 4. **Example `docker-compose.yml`**
-
-```yaml
-version: "3"
-services:
-  abrebiations:
-    build: ./abrebiations
-    ports:
-      - "4000:3000"
-    env_file:
-      - ./abrebiations/.env
-
-  pdf-search-engine:
-    build: ./pdf-search-engine
-    ports:
-      - "4001:3000"
-    env_file:
-      - ./pdf-search-engine/.env
-
-  dictionary-api:
-    build: ./dictionary-api
-    ports:
-      - "4002:3000"
-    env_file:
-      - ./dictionary-api/.env
-
-  auth:
-    build: ./auth
-    ports:
-      - "4003:3000"
-    env_file:
-      - ./auth/.env
-```
+4. **Mobile App Setup**
+   See detailed instructions in [Mobile App Setup](#-mobile-app-setup) section below.
 
 ---
 
@@ -257,75 +157,235 @@ services:
 
 ### Environment Variables
 
-Create `.env` files in each service directory:
-
+#### Auth Service (`VayuReader_Backend/auth/.env`)
 ```env
-# Example .env configuration
-PORT=3000
-MONGODB_URI=mongodb://localhost:27017/vayureader
-JWT_SECRET=your_super_secure_jwt_secret
-JWT_EXPIRES_IN=7d
-NODE_ENV=development
-UPLOAD_PATH=./uploads
-MAX_FILE_SIZE=10MB
+PORT=3010
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/dbname
+JWT_SECRET=your-secret-key-change-this
+JWT_EXPIRY_DAYS=1
+OTP_EXPIRY_MINUTES=5
+OTP_GATEWAY_URL=http://msg.com:8080/smsc/sends msg
+SKIP_OTP_SEND=true  # Set to true for development
+```
+
+#### Admin Auth Service (`VayuReader_Backend/admin_auth/.env`)
+```env
+ADMIN_NAME=Himanshu Bhatt
+ADMIN_CONTACT=89200 67341
+JWT_SECRET=admin-secret-key-change-this
+JWT_EXPIRY_DAYS=1
+ADMIN_AUTH_PORT=3012
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/dbname
+USER_JWT_SECRET=change_me  # Should match JWT_SECRET from auth service
+```
+
+#### Other Services
+Each service needs:
+```env
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/dbname
+PORT=<service_port>
 ```
 
 ---
 
-## 📱 Mobile App Features
+## 🔐 Authentication & Authorization
 
-- **Intuitive PDF Viewer** with zoom, navigation, and bookmarking
-- **Advanced Search** with filters and sorting options
-- **Dictionary Integration** for instant word lookup
-- **Abbreviation Expansion** for technical documents
-- **User Profiles** with reading history and preferences
+### User Authentication (OTP-Based)
+
+Users authenticate using OTP sent to their phone number:
+
+1. **Request OTP**
+   ```bash
+   POST http://localhost:3010/api/auth/login/request-otp
+   Body: { "name": "User Name", "phone_number": "9876543210" }
+   ```
+
+2. **Verify OTP**
+   ```bash
+   POST http://localhost:3010/api/auth/login/verify-otp
+   Body: { "phone_number": "9876543210", "otp": "123456" }
+   Response: { "token": "jwt_token", "user": {...} }
+   ```
+
+**User Permissions**: Read-only access (GET requests only)
+
+### Admin Authentication
+
+Admins authenticate with name and contact:
+
+```bash
+POST http://localhost:3012/api/auth/login
+Body: { "name": "Himanshu Bhatt", "contact": "89200 67341" }
+Response: { "token": "jwt_token", "admin": {...} }
+```
+
+**Admin Permissions**: Full access (GET, POST, PUT, DELETE)
+
+### Sub-Admin Management
+
+Super admin can create and manage sub-admins:
+
+```bash
+# Get all sub-admins (Super admin only)
+GET http://localhost:3012/api/sub-admins
+Headers: Authorization: Bearer <super_admin_token>
+
+# Create sub-admin (Super admin only)
+POST http://localhost:3012/api/sub-admins
+Body: { "name": "Sub Admin", "contact": "1234567890" }
+
+# Delete sub-admin (Super admin only)
+DELETE http://localhost:3012/api/sub-admins/<id>
+```
+
+**Sub-Admin Permissions**: Same as super admin (full access to content, but cannot manage other admins)
+
+---
+
+## 📊 Audit Logging
+
+All admin actions are automatically logged:
+
+```bash
+# Get audit logs
+GET http://localhost:3012/api/audit/logs?page=1&limit=50
+Headers: Authorization: Bearer <admin_token>
+
+# Get audit statistics
+GET http://localhost:3012/api/audit/stats
+Headers: Authorization: Bearer <admin_token>
+```
+
+Audit logs track:
+- Action type (CREATE, UPDATE, DELETE)
+- Resource type (ABBREVIATION, PDF, DICTIONARY_WORD)
+- Admin information (name, contact)
+- Timestamp
+- Resource details
 
 ---
 
 ## 🔌 API Documentation
 
-### PDF Search Engine
+### Service Ports
 
-| Endpoint      | Method | Description                  |
-|---------------|--------|------------------------------|
-| `/upload`     | POST   | Upload new PDF documents     |
-| `/pdfs`       | GET    | List all available PDFs      |
-| `/pdfs/:id`   | GET    | Get specific PDF details     |
-| `/search`     | GET    | Search PDFs by content       |
+| Service | Port | Base URL |
+|---------|------|----------|
+| Auth Service | 3010 | `http://localhost:3010` |
+| Admin Auth Service | 3012 | `http://localhost:3012` |
+| Abbreviations Service | 3001 | `http://localhost:3001` |
+| PDF Service | 3005 | `http://localhost:3005` |
+| Dictionary Service | 3000 | `http://localhost:3000` |
 
+### API Endpoints
 
-### Abbreviations API
+#### Authentication
 
-| Endpoint                       | Method | Description                       |
-|---------------------------------|--------|-----------------------------------|
-| `/abbreviations`               | GET    | List all abbreviations            |
-| `/abbreviations`               | POST   | Add new abbreviation              |
-| `/refresh`                     | POST   | Refresh JWT token                 |
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/auth/login/request-otp` | POST | None | Request OTP for user login |
+| `/api/auth/login/verify-otp` | POST | None | Verify OTP and get user token |
+| `/api/auth/login` | POST | None | Admin login |
 
-### Authentication API
+#### Abbreviations
 
-| Endpoint   | Method | Description              |
-|------------|--------|--------------------------|
-| `/signup`  | POST   | Register new user        |
-| `/login`   | POST   | User authentication      |
-| `/profile` | GET    | Get current user profile |
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/abbreviations/:abbr` | GET | User/Admin | Get abbreviation by name |
+| `/api/abbreviations/all` | GET | User/Admin | Get all abbreviations |
+| `/api/abbreviations` | POST | Admin | Create abbreviation |
+| `/api/abbreviations/:id` | PUT | Admin | Update abbreviation |
+| `/api/abbreviations/:id` | DELETE | Admin | Delete abbreviation |
 
-### Dictionary API
+#### PDFs
 
-```json
-GET /dictionary/:word
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/pdfs` | GET | User/Admin | Search PDFs |
+| `/api/pdfs/all` | GET | User/Admin | Get all PDFs |
+| `/api/pdfs/:id` | GET | User/Admin | Get PDF by ID |
+| `/api/pdfs/upload` | POST | Admin | Upload PDF |
+| `/api/pdfs/:id` | PUT | Admin | Update PDF |
+| `/api/pdfs/:id` | DELETE | Admin | Delete PDF |
 
-Response:
-{
-  "word": {
-    "meanings": [
-      ["noun", "definition", ["synonym1", "synonym2"], ["example"]]
-    ],
-    "synonyms": ["word1", "word2"],
-    "antonyms": ["opposite1", "opposite2"]
-  }
-}
-```
+#### Dictionary
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/dictionary/word/:word` | GET | User/Admin | Get word definition |
+| `/api/dictionary/words` | GET | User/Admin | Get word list |
+| `/api/dictionary/words/all` | GET | User/Admin | Get all words |
+| `/api/dictionary/search/:term` | GET | User/Admin | Search words |
+| `/api/dictionary` | POST | Admin | Add word |
+| `/api/dictionary/:id` | PUT | Admin | Update word |
+| `/api/dictionary/:id` | DELETE | Admin | Delete word |
+
+#### Sub-Admin Management (Super Admin Only)
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/sub-admins` | GET | Super Admin | Get all sub-admins |
+| `/api/sub-admins` | POST | Super Admin | Create sub-admin |
+| `/api/sub-admins/:id` | DELETE | Super Admin | Delete sub-admin |
+
+#### Audit Logs (Admin Only)
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/audit/logs` | GET | Admin | Get audit logs (with filters) |
+| `/api/audit/stats` | GET | Admin | Get audit statistics |
+
+---
+
+## 📱 Mobile App Setup
+
+### Prerequisites
+1. An Android phone
+2. A laptop/PC with the project set up
+3. Both devices on the same Wi-Fi or hotspot
+
+### Step-by-Step Instructions
+
+1. **Install the App on Your Phone**
+   - Download the APK from the provided link
+   - Allow installation from unknown sources
+   - Install the app
+
+2. **Start the Development Server**
+   ```bash
+   cd VayuReader_Frontend
+   npx expo start --dev-client
+   ```
+
+3. **Connect Your Phone**
+   - The app should auto-connect
+   - If not, manually enter the connection URL from the terminal
+
+4. **Update Code**
+   - No need to reinstall
+   - Just restart the dev server and reopen the app
+
+5. **Rebuild App** (only when needed)
+   ```bash
+   eas build --platform android --profile development
+   ```
+
+---
+
+## 🧪 Testing
+
+See [POSTMAN_TESTING_GUIDE.md](VayuReader_Backend/POSTMAN_TESTING_GUIDE.md) for comprehensive API testing instructions.
+
+### Quick Test Checklist
+
+- [ ] User can request and verify OTP
+- [ ] User can read data (GET requests)
+- [ ] User cannot write data (POST/PUT/DELETE - should get 403)
+- [ ] Admin can login
+- [ ] Admin can perform all operations
+- [ ] Super admin can manage sub-admins
+- [ ] Sub-admins cannot manage other admins
+- [ ] Audit logs are being recorded
 
 ---
 
@@ -345,59 +405,72 @@ Response:
 - **Mongoose** - MongoDB object modeling
 - **JWT** - Authentication tokens
 - **Multer** - File upload handling
-- **bcrypt** - Password hashing
-- **Docker – Containerization for consistent and portable backend deployment
+- **bcrypt** - Password hashing (for legacy)
+- **Docker** - Containerization
 
 ### Admin Dashboard
 - **React** - UI library
 - **Tailwind CSS** - Utility-first CSS framework
 - **React Router** - Client-side routing
+- **Axios** - HTTP client
 
 ---
 
-## 📊 Features Breakdown
+## 🐳 Docker Deployment
 
-### 🔍 Search Engine
-- Full-text search across PDF content
-- Advanced query syntax support
-- Search result ranking and relevance
-- Search history and suggestions
+### Build and Run All Services
 
-### 📚 Content Management
-- Bulk PDF upload and processing
-- Metadata management
+```bash
+cd VayuReader_Backend
+docker-compose up --build
+```
 
-### 👥 User Management
-- Secure user registration and login
-- Access control and permissions
+### Individual Service Dockerfiles
+
+Each service has its own Dockerfile for independent deployment.
 
 ---
 
 ## 🚢 Deployment
 
-### Docker Deployment
+### Backend Services
+Deploy to cloud providers (AWS, GCP, Azure, Render, etc.)
 
-```bash
-# Build and run with Docker Compose
-cd VayuReader_Backend
-docker-compose up --build
-```
+### Frontend
+Build and deploy using Expo EAS
 
-### Manual Deployment
+### Admin Dashboard
+Deploy to Vercel, Netlify, or similar platform
 
-1. **Backend Services**: Deploy to your preferred cloud provider (AWS, GCP, Azure, Render, etc.)
-2. **Frontend**: Build and deploy using Expo EAS
-3. **Admin Dashboard**: Deploy to Vercel, Netlify, or similar platform
+---
 
-### Docker Hub
+## 📝 Features Breakdown
 
-Images of the backend services has been pushed to docker hub.
+### 🔍 Search Engine
+- Full-text search across PDF content
+- Advanced query syntax support
+- Search result ranking and relevance
+
+### 📚 Content Management
+- Bulk PDF upload and processing
+- Metadata management
+- File organization and categorization
+
+### 👥 User Management
+- OTP-based user authentication
+- Admin and sub-admin management
+- Role-based access control
+
+### 📊 Audit & Monitoring
+- Complete activity logging
+- Admin action tracking
+- Statistics and reporting
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please follow these steps:
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
@@ -409,7 +482,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ## 📞 Support
 
-- 📧 Email: support@vayureader.com
+For issues, questions, or contributions, please open an issue on GitHub.
 
 ---
 
@@ -421,9 +494,31 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - [ ] Integration with cloud storage providers
 - [ ] Voice search capabilities
 - [ ] Collaborative annotation features
+- [ ] Real-time notifications
+- [ ] Advanced search filters
+
+---
+
+## 📄 License
+
+This project is licensed under the ISC License.
+
+---
+
+## 🙏 Acknowledgments
+
+Built with ❤️ for the Indian Air Force community
+
+---
+
+## 📚 Additional Documentation
+
+- [Postman Testing Guide](VayuReader_Backend/POSTMAN_TESTING_GUIDE.md)
+- [Admin Auth Service README](VayuReader_Backend/admin_auth/README.md)
+- [Auth Service README](VayuReader_Backend/auth/README.md)
 
 ---
 
 <div align="center">
-  <strong>Built with ❤️ for the Indian AirForce community</strong>
+  <strong>Built with ❤️ for the Indian Air Force community</strong>
 </div>

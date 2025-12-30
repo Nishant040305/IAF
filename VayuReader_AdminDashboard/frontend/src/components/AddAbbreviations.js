@@ -15,9 +15,12 @@ export default function AddAbbreviations() {
     }
 
     try {
-      const response = await axios.post('http://localhost:5000/api/abbreviation/add', {
+      const token = localStorage.getItem('token');
+      const response = await axios.post('http://localhost:3001/api/abbreviations', {
         abbreviation,
-        meaning,
+        fullForm: meaning,
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       if (response.status === 201) {

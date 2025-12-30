@@ -7,7 +7,7 @@ export default function Search() {
 
   const handleSearch = async () => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/pdf/search?query=${query}`);
+      const res = await axios.get(`http://localhost:3005/api/pdfs?search=${query}`);
       setResults(res.data);
     } catch {
       alert("Search failed");
@@ -29,7 +29,7 @@ export default function Search() {
         {results.map((pdf) => (
           <li key={pdf._id} className="mt-2">
             <a
-              href={`http://localhost:5000/api/pdf/view/${pdf._id}`}
+              href={`http://localhost:3005/api/pdfs/${pdf._id}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-700 underline"

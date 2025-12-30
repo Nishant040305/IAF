@@ -1,14 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    // Check if user is super admin
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        setIsSuperAdmin(payload.isSuperAdmin || false);
+      } catch (error) {
+        console.error('Error decoding token:', error);
+      }
+    }
+  }, []);
 
   const cards = [
-    { title: 'Upload Pdf', route: '/search' },
-    { title: 'Add Dictionary Words', route: '/add-dictionary-words' },
-    { title: 'Add Abbreviations', route: '/add-abbreviations' },
+    { title: 'Manage PDFs', route: '/manage-pdfs' },
+    { title: 'Manage Dictionary Words', route: '/manage-dictionary-words' },
+    { title: 'Manage Abbreviations', route: '/manage-abbreviations' },
   ];
+
+  // Add sub-admin management card only for super admin
+  if (isSuperAdmin) {
+    cards.push({ title: 'Manage Sub-Admins', route: '/manage-sub-admins' });
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-sky-800 flex flex-col items-center justify-center p-6">

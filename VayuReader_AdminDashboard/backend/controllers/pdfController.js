@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { convert } = require("pdf-poppler");
+const { v4: uuidv4 } = require("uuid");
 const Pdf = require("../models/Pdf");
 
 const uploadPdfMetadata = async (req, res) => {
@@ -69,4 +70,81 @@ const uploadPdfMetadata = async (req, res) => {
   }
 };
 
-module.exports = { uploadPdfMetadata };
+const updatePdf = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, content, category } = req.body;
+    const pdfFile = req.files?.pdf?.[0];
+    const thumbnailFile = req.files?.thumbnail?.[0];
+
+    const updateData = {};
+    if (title) updateData.title = title;
+    if (content) updateData.content = content;
+    if (category) updateData.category = category;
+
+    if (pdfFile) {
+      const folderName = req.folderName || uuidv4();
+      updateData.pdf = `/uploads/${folderName}/${pdfFile.filename}`;
+    }
+
+    if (thumbnailFile) {
+      const folderName = req.folderName || uuidv4();
+      updateData.thumbnail = `/uploads/${folderName}/${thumbnailFile.filename}`;
+    }
+
+    const updated = await Pdf.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+
+    if (!updated) {
+      return res.status(404).json({ success: false, msg: 'PDF not found' });
+    }
+
+    res.json({ success: true, msg: 'PDF updated successfully', data: updated });
+  } catch (error) {
+    console.error('Error updating PDF:', error);
+    res.status(500).json({ success: false, msg: 'Server error', error: error.message });
+  }
+};
+
+const deletePdf = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const pdf = await Pdf.findById(id);
+    if (!pdf) {
+      return res.status(404).json({ success: false, msg: 'PDF not found' });
+    }
+
+    // Delete files if they exist
+    if (pdf.pdf) {
+      const pdfPath = path.join(__dirname, '..', pdf.pdf);
+      if (fs.existsSync(pdfPath)) {
+        fs.unlinkSync(pdfPath);
+      }
+    }
+    if (pdf.thumbnail) {
+      const thumbPath = path.join(__dirname, '..', pdf.thumbnail);
+      if (fs.existsSync(thumbPath)) {
+        fs.unlinkSync(thumbPath);
+      }
+    }
+
+    await Pdf.findByIdAndDelete(id);
+
+    res.json({ success: true, msg: 'PDF deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting PDF:', error);
+    res.status(500).json({ success: false, msg: 'Server error', error: error.message });
+  }
+};
+
+const getAllPdfs = async (req, res) => {
+  try {
+    const pdfs = await Pdf.find({}).sort({ createdAt: -1 });
+    res.json({ success: true, data: pdfs });
+  } catch (error) {
+    console.error('Error fetching PDFs:', error);
+    res.status(500).json({ success: false, msg: 'Server error', error: error.message });
+  }
+};
+
+module.exports = { uploadPdfMetadata, updatePdf, deletePdf, getAllPdfs };

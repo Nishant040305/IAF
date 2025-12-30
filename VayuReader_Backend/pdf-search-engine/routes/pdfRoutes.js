@@ -5,6 +5,8 @@ const multer = require("multer");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
+const { unifiedAuth, adminOnly } = require("../../admin_auth/middleware/unifiedAuth");
+const { logAction } = require("../../admin_auth/utils/auditLogger");
 // const storage = multer.diskStorage({
 //   destination: function (req, file, cb) {
 //     cb(null, "uploads/"); // This folder must exist
@@ -65,8 +67,8 @@ router.get("/health/:id", (req, res) => {
   res.json({ status: "ok", route: `GET /api/pdfs/${req.params.id}` });
 });
 
-// GET /api/pdfs?search=...
-router.get("/", async (req, res) => {
+// GET /api/pdfs?search=... (authenticated users can read)
+router.get("/", unifiedAuth, async (req, res) => {
   try {
     const { search } = req.query;
     let query = {};
@@ -105,8 +107,18 @@ router.get("/", async (req, res) => {
 //   }
 // });
 
-// POST /api/pdfs/upload 
-router.post("/upload", upload.fields([
+// GET /api/pdfs/all (authenticated users can read, admin can manage)
+router.get("/all", unifiedAuth, async (req, res) => {
+  try {
+    const documents = await PdfDocument.find({}).sort({ createdAt: -1 });
+    res.json({ success: true, data: documents });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/pdfs/upload (admin only)
+router.post("/upload", adminOnly, upload.fields([
   { name: "pdf", maxCount: 1 },
   { name: "thumbnail", maxCount: 1 }
 ]), async (req, res) => {
@@ -135,24 +147,123 @@ const thumbnail = thumbnailFile ? `/${thumbnailFile.path.replace(/\\/g, "/")}` :
 
     await newDoc.save();
 
-    res.status(201).json({ message: "PDF uploaded & saved", document: newDoc });
+    // Log audit action
+    await logAction('CREATE', 'PDF', newDoc._id, req.admin, {
+      title: newDoc.title,
+      category: newDoc.category,
+      pdfUrl: newDoc.pdfUrl
+    });
+
+    res.status(201).json({ success: true, message: "PDF uploaded & saved", data: newDoc });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Upload failed", error: err.message });
-  }
-});
-// (get all PDFs sorted by viewCount descending)
-router.get("/all", async (req, res) => {
-  try {
-    const documents = await PdfDocument.find({}).sort({ viewCount: -1 });
-    res.json(documents);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, message: "Upload failed", error: err.message });
   }
 });
 
-// (get single PDF and increment view count)
-router.get("/:id", async (req, res) => {
+// PUT /api/pdfs/:id (admin only)
+router.put("/:id", adminOnly, upload.fields([
+  { name: "pdf", maxCount: 1 },
+  { name: "thumbnail", maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const { title, content, category } = req.body;
+    const pdfFile = req.files["pdf"] ? req.files["pdf"][0] : null;
+    const thumbnailFile = req.files["thumbnail"] ? req.files["thumbnail"][0] : null;
+
+    // Get old data for audit log
+    const oldData = await PdfDocument.findById(req.params.id);
+    if (!oldData) {
+      return res.status(404).json({ success: false, error: "PDF not found" });
+    }
+
+    const updateData = {};
+    if (title) updateData.title = title;
+    if (content) updateData.content = content;
+    if (category) updateData.category = category;
+
+    if (pdfFile) {
+      updateData.pdfUrl = `/${pdfFile.path.replace(/\\/g, "/")}`;
+    }
+
+    if (thumbnailFile) {
+      updateData.thumbnail = `/${thumbnailFile.path.replace(/\\/g, "/")}`;
+    }
+
+    const updated = await PdfDocument.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    // Log audit action
+    await logAction('UPDATE', 'PDF', updated._id, req.admin, {
+      old: oldData ? { title: oldData.title, category: oldData.category } : null,
+      new: { title: updated.title, category: updated.category }
+    });
+
+    res.json({ success: true, message: "PDF updated successfully", data: updated });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE /api/pdfs/:id (admin only)
+router.delete("/:id", adminOnly, async (req, res) => {
+  try {
+    const pdf = await PdfDocument.findById(req.params.id);
+    if (!pdf) {
+      return res.status(404).json({ success: false, error: "PDF not found" });
+    }
+
+    // Delete files if they exist
+    try {
+      if (pdf.pdfUrl) {
+        const pdfPath = path.join(__dirname, '..', pdf.pdfUrl);
+        if (fs.existsSync(pdfPath)) {
+          fs.unlinkSync(pdfPath);
+          // Also try to delete the parent folder if it's empty
+          const folderPath = path.dirname(pdfPath);
+          try {
+            const files = fs.readdirSync(folderPath);
+            if (files.length === 0) {
+              fs.rmdirSync(folderPath);
+            }
+          } catch (e) {
+            // Ignore if folder not empty or can't delete
+          }
+        }
+      }
+      if (pdf.thumbnail) {
+        const thumbPath = path.join(__dirname, '..', pdf.thumbnail);
+        if (fs.existsSync(thumbPath)) {
+          fs.unlinkSync(thumbPath);
+        }
+      }
+    } catch (fileError) {
+      console.error('Error deleting files:', fileError);
+      // Continue with database deletion even if file deletion fails
+    }
+
+    const deleted = await PdfDocument.findByIdAndDelete(req.params.id);
+    
+    // Log audit action
+    await logAction('DELETE', 'PDF', deleted._id, req.admin, {
+      title: deleted.title,
+      category: deleted.category,
+      pdfUrl: deleted.pdfUrl
+    });
+    
+    res.json({ success: true, message: "PDF deleted successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// (get single PDF and increment view count) - authenticated users can read
+router.get("/:id", unifiedAuth, async (req, res) => {
   try {
     const pdf = await PdfDocument.findByIdAndUpdate(
       req.params.id,

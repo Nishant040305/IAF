@@ -1,12 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const upload = require('../middleware/upload');
-const { uploadPdfMetadata } = require('../controllers/pdfController');
+const { 
+  uploadPdfMetadata, 
+  updatePdf, 
+  deletePdf, 
+  getAllPdfs 
+} = require('../controllers/pdfController');
+const { verifyAdminToken } = require('../../../VayuReader_Backend/admin_auth/adminAuthController');
 
-// Accept both pdf and thumbnail (optional)
-router.post('/upload', upload.fields([
-{ name: 'pdf', maxCount: 1 },
-{ name: 'thumbnail', maxCount: 1 }
+router.get('/', verifyAdminToken, getAllPdfs);
+router.post('/upload', verifyAdminToken, upload.fields([
+  { name: 'pdf', maxCount: 1 },
+  { name: 'thumbnail', maxCount: 1 }
 ]), uploadPdfMetadata);
+router.put('/:id', verifyAdminToken, upload.fields([
+  { name: 'pdf', maxCount: 1 },
+  { name: 'thumbnail', maxCount: 1 }
+]), updatePdf);
+router.delete('/:id', verifyAdminToken, deletePdf);
 
 module.exports = router;

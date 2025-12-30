@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Word = require('../models/Word');
+const { unifiedAuth, adminOnly } = require('../../admin_auth/middleware/unifiedAuth');
+const { logAction } = require('../../admin_auth/utils/auditLogger');
 
 // Health check for POST /api/dictionary/upload
 router.get('/health/upload', (req, res) => {
@@ -22,8 +24,8 @@ router.get('/health', (req, res) => {
   res.json({ status: 'ok', route: '/api/dictionary' });
 });
 
-// Upload full dictionary
-router.post('/upload', async (req, res) => {
+// Upload full dictionary (admin only)
+router.post('/upload', adminOnly, async (req, res) => {
   try {
     const dictionaryData = req.body;
     if (!dictionaryData || typeof dictionaryData !== 'object') {
@@ -123,8 +125,126 @@ router.get('/word/:word', async (req, res) => {
   }
 });
 
-// Get first 100 words
-router.get('/words', async (req, res) => {
+// Get all words (authenticated users can read, admin can manage)
+router.get('/words/all', unifiedAuth, async (req, res) => {
+  try {
+    const words = await Word.find({}).sort({ word: 1 });
+    res.json({ success: true, data: words });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/dictionary (add word - admin only)
+router.post('/', adminOnly, async (req, res) => {
+  try {
+    const { word, meanings, synonyms, antonyms } = req.body;
+    if (!word || !meanings || !Array.isArray(meanings) || meanings.length === 0 || !meanings[0].definition) {
+      return res.status(400).json({ success: false, error: 'Word and at least one definition are required' });
+    }
+
+    const existing = await Word.findOne({ word: word.toUpperCase() });
+    if (existing) {
+      return res.status(409).json({ success: false, error: 'Word already exists' });
+    }
+
+    const formattedMeanings = meanings.map(m => ({
+      partOfSpeech: m.partOfSpeech || null,
+      definition: m.definition,
+      synonyms: Array.isArray(m.synonyms) && m.synonyms.length ? m.synonyms : null,
+      examples: Array.isArray(m.examples) && m.examples.length ? m.examples : null
+    }));
+
+    const newWord = new Word({
+      word: word.toUpperCase(),
+      meanings: formattedMeanings,
+      synonyms: Array.isArray(synonyms) && synonyms.length ? synonyms : null,
+      antonyms: Array.isArray(antonyms) && antonyms.length ? antonyms : null
+    });
+
+    await newWord.save();
+    
+    // Log audit action
+    await logAction('CREATE', 'DICTIONARY_WORD', newWord._id, req.admin, {
+      word: newWord.word,
+      definition: newWord.meanings[0]?.definition
+    });
+    
+    res.status(201).json({ success: true, message: 'Word added successfully', data: newWord });
+  } catch (error) {
+    console.error('Error adding word:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PUT /api/dictionary/:id (update word - admin only)
+router.put('/:id', adminOnly, async (req, res) => {
+  try {
+    const { word, meanings, synonyms, antonyms } = req.body;
+    if (!word || !meanings || !Array.isArray(meanings) || meanings.length === 0 || !meanings[0].definition) {
+      return res.status(400).json({ success: false, error: 'Word and at least one definition are required' });
+    }
+
+    const formattedMeanings = meanings.map(m => ({
+      partOfSpeech: m.partOfSpeech || null,
+      definition: m.definition,
+      synonyms: Array.isArray(m.synonyms) && m.synonyms.length ? m.synonyms : null,
+      examples: Array.isArray(m.examples) && m.examples.length ? m.examples : null
+    }));
+
+    const updateData = {
+      word: word.toUpperCase(),
+      meanings: formattedMeanings,
+      synonyms: Array.isArray(synonyms) && synonyms.length ? synonyms : null,
+      antonyms: Array.isArray(antonyms) && antonyms.length ? antonyms : null
+    };
+
+    // Get old data for audit log
+    const oldData = await Word.findById(req.params.id);
+    if (!oldData) {
+      return res.status(404).json({ success: false, error: 'Word not found' });
+    }
+
+    const updated = await Word.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
+
+    // Log audit action
+    await logAction('UPDATE', 'DICTIONARY_WORD', updated._id, req.admin, {
+      old: oldData ? { word: oldData.word, definition: oldData.meanings[0]?.definition } : null,
+      new: { word: updated.word, definition: updated.meanings[0]?.definition }
+    });
+
+    res.json({ success: true, message: 'Word updated successfully', data: updated });
+  } catch (error) {
+    console.error('Error updating word:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE /api/dictionary/:id (admin only)
+router.delete('/:id', adminOnly, async (req, res) => {
+  try {
+    // Get data before deletion for audit log
+    const toDelete = await Word.findById(req.params.id);
+    if (!toDelete) {
+      return res.status(404).json({ success: false, error: 'Word not found' });
+    }
+    
+    const deleted = await Word.findByIdAndDelete(req.params.id);
+    
+    // Log audit action
+    await logAction('DELETE', 'DICTIONARY_WORD', deleted._id, req.admin, {
+      word: deleted.word,
+      definition: deleted.meanings[0]?.definition
+    });
+    res.json({ success: true, message: 'Word deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting word:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get first 100 words (authenticated users can read)
+router.get('/words', unifiedAuth, async (req, res) => {
   try {
     const words = await Word.find().limit(100).select('word').lean();
     res.json({
@@ -137,8 +257,8 @@ router.get('/words', async (req, res) => {
   }
 });
 
-// Partial search for words with full info (meanings, etc.)
-router.get('/search/:term', async (req, res) => {
+// Partial search for words with full info (meanings, etc.) - authenticated users can read
+router.get('/search/:term', unifiedAuth, async (req, res) => {
   try {
     const searchTerm = req.params.term;
     if (!searchTerm) {

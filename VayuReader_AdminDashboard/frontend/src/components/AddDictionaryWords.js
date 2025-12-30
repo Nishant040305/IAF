@@ -28,7 +28,10 @@ export default function AddDictionaryWords() {
     };
 
     try {
-      const res = await axios.post('http://localhost:5000/api/dictionary', payload);
+      const token = localStorage.getItem('token');
+      const res = await axios.post('http://localhost:3000/api/dictionary', payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setMessage('✅ Word added successfully');
       setWord('');
       setMeaning('');

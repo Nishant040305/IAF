@@ -3,7 +3,7 @@ const bcrypt = require("bcrypt");
 const Admin = require("./models/Admin");
 require("dotenv").config();
 
-const MONGO_URI = process.env.MONGO_URI;
+const MONGO_URI = process.env.MONGODB_URI;
 
 const admins = [
   {

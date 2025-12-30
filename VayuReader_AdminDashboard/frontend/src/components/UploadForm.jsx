@@ -39,8 +39,13 @@ export default function UploadForm() {
     }
 
     try {
-      const res = await fetch('http://localhost:5000/api/pdf/upload', {
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:3005/api/pdfs/upload', {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+          // Don't set Content-Type - browser will set it automatically with boundary for FormData
+        },
         body: payload,
       });
 
