@@ -50,25 +50,21 @@ const upload = multer({ storage, fileFilter });
 
 // Health check for GET /api/pdfs
 router.get("/health/search", (req, res) => {
-  console.log('[HEALTH] GET /api/pdfs/health/search');
   res.json({ status: "ok", route: "GET /api/pdfs?search=" });
 });
 
 // Health check for POST /api/pdfs/upload
 router.get("/health/upload", (req, res) => {
-  console.log('[HEALTH] GET /api/pdfs/health/upload');
   res.json({ status: "ok", route: "POST /api/pdfs/upload" });
 });
 
 // Health check for GET /api/pdfs/all
 router.get("/health/all", (req, res) => {
-  console.log('[HEALTH] GET /api/pdfs/health/all');
   res.json({ status: "ok", route: "GET /api/pdfs/all" });
 });
 
 // Health check for GET /api/pdfs/:id
 router.get("/health/:id", (req, res) => {
-  console.log(`[HEALTH] GET /api/pdfs/health/${req.params.id}`);
   res.json({ status: "ok", route: `GET /api/pdfs/${req.params.id}` });
 });
 
