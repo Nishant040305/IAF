@@ -111,6 +111,7 @@ router.get("/", unifiedAuth, async (req, res) => {
 router.get("/all", unifiedAuth, async (req, res) => {
   try {
     const documents = await PdfDocument.find({}).sort({ createdAt: -1 });
+    console.log(`Retrieved ${documents} documents`);
     res.json({ success: true, data: documents });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
