@@ -3,9 +3,9 @@
 const API_CONFIG = {
   // Base URLs
   ADMIN_AUTH_BASE_URL: process.env.REACT_APP_ADMIN_AUTH_URL || 'http://localhost:3012',
-  ABBREVIATIONS_BASE_URL: process.env.REACT_APP_ABBREVIATIONS_URL || 'http://localhost:3001',
-  PDF_BASE_URL: process.env.REACT_APP_PDF_URL || 'http://localhost:3005',
-  DICTIONARY_BASE_URL: process.env.REACT_APP_DICTIONARY_URL || 'http://localhost:3000',
+  ABBREVIATIONS_BASE_URL: process.env.REACT_APP_ABBREVIATIONS_URL || 'http://localhost:3010',
+  PDF_BASE_URL: process.env.REACT_APP_PDF_URL || 'http://localhost:8080',
+  DICTIONARY_BASE_URL: process.env.REACT_APP_DICTIONARY_URL || 'http://localhost:3031',
 
   // Endpoints
   ADMIN_AUTH_LOGIN: process.env.REACT_APP_ADMIN_AUTH_LOGIN || '/api/auth/login',

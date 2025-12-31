@@ -76,7 +76,12 @@ export default function ManageAbbreviations() {
         }
       }
     } catch (error) {
-      setMessage(error.response?.data?.msg || '❌ Error occurred');
+      console.error('Error saving abbreviation:', error);
+      const errorMsg = error.response?.data?.error || error.response?.data?.msg || error.message || '❌ Error occurred';
+      setMessage(`❌ ${errorMsg}`);
+      if (error.response?.status === 401) {
+        navigate('/');
+      }
     }
   };
 
@@ -98,7 +103,12 @@ export default function ManageAbbreviations() {
         fetchAbbreviations();
       }
     } catch (error) {
-      setMessage(error.response?.data?.error || '❌ Error deleting abbreviation');
+      console.error('Error deleting abbreviation:', error);
+      const errorMsg = error.response?.data?.error || error.response?.data?.msg || error.message || '❌ Error deleting abbreviation';
+      setMessage(`❌ ${errorMsg}`);
+      if (error.response?.status === 401) {
+        navigate('/');
+      }
     }
   };
 

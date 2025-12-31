@@ -41,6 +41,11 @@ export default function UploadForm() {
 
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        setMessage('❌ Please login first');
+        return;
+      }
+
       const res = await fetch(`${API_CONFIG.pdfs}/upload`, {
         method: 'POST',
         headers: {
@@ -50,11 +55,26 @@ export default function UploadForm() {
         body: payload,
       });
 
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Upload failed' }));
+        setMessage(`❌ ${errorData.message || errorData.error || 'Upload failed'}`);
+        return;
+      }
+
       const data = await res.json();
-      setMessage(data.msg || '✅ Upload successful!');
+      setMessage(data.message || data.msg || '✅ Upload successful!');
+      
+      // Reset form on success
+      setFormData({
+        title: '',
+        content: '',
+        category: '',
+        pdfFile: null,
+        thumbnailFile: null,
+      });
     } catch (err) {
-      console.error(err);
-      setMessage('❌ Upload failed.');
+      console.error('Upload error:', err);
+      setMessage(`❌ Network error: ${err.message || 'Please check if the server is running'}`);
     }
   };
 

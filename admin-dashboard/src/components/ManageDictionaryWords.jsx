@@ -98,7 +98,12 @@ export default function ManageDictionaryWords() {
         }
       }
     } catch (error) {
-      setMessage(error.response?.data?.msg || '❌ Error occurred');
+      console.error('Error saving word:', error);
+      const errorMsg = error.response?.data?.error || error.response?.data?.msg || error.message || '❌ Error occurred';
+      setMessage(`❌ ${errorMsg}`);
+      if (error.response?.status === 401) {
+        navigate('/');
+      }
     }
   };
 
@@ -140,7 +145,12 @@ export default function ManageDictionaryWords() {
         fetchWords();
       }
     } catch (error) {
-      setMessage(error.response?.data?.error || '❌ Error deleting word');
+      console.error('Error deleting word:', error);
+      const errorMsg = error.response?.data?.error || error.response?.data?.msg || error.message || '❌ Error deleting word';
+      setMessage(`❌ ${errorMsg}`);
+      if (error.response?.status === 401) {
+        navigate('/');
+      }
     }
   };
 

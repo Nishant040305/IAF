@@ -6,7 +6,7 @@ const cors = require("cors");
 const pdfRoutes = require("./routes/pdfRoutes");
 
 const app = express();
-const PORT = process.env.PORT || 3005;
+const PORT = process.env.PORT || 8080;
 
 // CORS configuration
 const corsOptions = {
@@ -42,6 +42,17 @@ app.use("/uploads", express.static(path.join(__dirname, 'uploads')));
 
 app.get("/", (req, res) => {
   res.json({ message: "PDF Search Engine API" });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ success: false, error: err.message || 'Something went wrong!' });
+});
+
+// 404 handler - must be last, after all routes
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: 'Route not found' });
 });
 
 app.listen(PORT, () => {

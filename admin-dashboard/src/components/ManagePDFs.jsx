@@ -108,7 +108,11 @@ export default function ManagePDFs() {
       }
     } catch (error) {
       console.error('Upload error:', error);
-      setMessage(error.response?.data?.msg || error.message || '❌ Error occurred');
+      const errorMsg = error.response?.data?.error || error.response?.data?.msg || error.response?.data?.message || error.message || '❌ Error occurred';
+      setMessage(`❌ ${errorMsg}`);
+      if (error.response?.status === 401) {
+        navigate('/');
+      }
     }
   };
 
@@ -147,7 +151,12 @@ export default function ManagePDFs() {
         fetchPDFs();
       }
     } catch (error) {
-      setMessage(error.response?.data?.error || '❌ Error deleting PDF');
+      console.error('Error deleting PDF:', error);
+      const errorMsg = error.response?.data?.error || error.response?.data?.msg || error.message || '❌ Error deleting PDF';
+      setMessage(`❌ ${errorMsg}`);
+      if (error.response?.status === 401) {
+        navigate('/');
+      }
     }
   };
 

@@ -36,7 +36,18 @@ mongoose
 app.use('/api/abbreviations', achroRoute); 
 
 app.get("/", (req, res) => {
-  res.json({ message: "PDF Search Engine API" });
+  res.json({ message: "Abbreviations API" });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ success: false, error: err.message || 'Something went wrong!' });
+});
+
+// 404 handler - must be last, after all routes
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: 'Route not found' });
 });
 
 app.listen(PORT, () => {

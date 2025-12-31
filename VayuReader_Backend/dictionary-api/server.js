@@ -5,7 +5,7 @@ const connectDB = require('./config/database');
 const dictionaryRoutes = require('./routes/dictionary');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3031;
 
 connectDB();
 
@@ -43,8 +43,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-
-app.use('*', (req, res) => {
+// 404 handler - must be last, after all routes
+app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
