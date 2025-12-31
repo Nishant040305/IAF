@@ -15,7 +15,7 @@ const buildOtpUrl = (to, otp) => {
   const url = new URL(base);
   url.searchParams.set('from', 'VAYUREADER');
   url.searchParams.set('to', to);
-  url.searchParams.set('text', `Your OTP code for Login : ${otp} . Regards,`);
+  url.searchParams.set('text', `Your OTP code for Login : ${otp} - VayuReader`);
   console.log('Built OTP URL:', url.toString());
   return url;
 };
