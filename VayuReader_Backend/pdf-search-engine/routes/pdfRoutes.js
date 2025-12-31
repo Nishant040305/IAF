@@ -26,6 +26,7 @@ const storage = multer.diskStorage({
     }
     const uploadPath = path.join("uploads", req.folderName);
     fs.mkdirSync(uploadPath, { recursive: true });
+    console.log(`[upload] uploadPath=${uploadPath} folder=${req.folderName}`);
     cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
@@ -49,21 +50,25 @@ const upload = multer({ storage, fileFilter });
 
 // Health check for GET /api/pdfs
 router.get("/health/search", (req, res) => {
+  console.log('[HEALTH] GET /api/pdfs/health/search');
   res.json({ status: "ok", route: "GET /api/pdfs?search=" });
 });
 
 // Health check for POST /api/pdfs/upload
 router.get("/health/upload", (req, res) => {
+  console.log('[HEALTH] GET /api/pdfs/health/upload');
   res.json({ status: "ok", route: "POST /api/pdfs/upload" });
 });
 
 // Health check for GET /api/pdfs/all
 router.get("/health/all", (req, res) => {
+  console.log('[HEALTH] GET /api/pdfs/health/all');
   res.json({ status: "ok", route: "GET /api/pdfs/all" });
 });
 
 // Health check for GET /api/pdfs/:id
 router.get("/health/:id", (req, res) => {
+  console.log(`[HEALTH] GET /api/pdfs/health/${req.params.id}`);
   res.json({ status: "ok", route: `GET /api/pdfs/${req.params.id}` });
 });
 
@@ -71,6 +76,7 @@ router.get("/health/:id", (req, res) => {
 router.get("/", unifiedAuth, async (req, res) => {
   try {
     const { search } = req.query;
+    console.log(`[GET /api/pdfs] search="${search}" admin=${req.admin?._id || 'none'} user=${req.user?._id || 'none'}`);
     let query = {};
     if (search) {
       query = {
@@ -82,6 +88,7 @@ router.get("/", unifiedAuth, async (req, res) => {
       };
     }
     let documents = await PdfDocument.find(query);
+    console.log(`[GET /api/pdfs] found ${documents.length} documents for search="${search}"`);
     res.json(documents);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -111,7 +118,7 @@ router.get("/", unifiedAuth, async (req, res) => {
 router.get("/all", unifiedAuth, async (req, res) => {
   try {
     const documents = await PdfDocument.find({}).sort({ createdAt: -1 });
-    console.log(`Retrieved ${documents} documents`);
+    console.log(`[GET /api/pdfs/all] returned ${documents.length} documents admin=${req.admin?._id || 'none'}`);
     res.json({ success: true, data: documents });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -127,6 +134,9 @@ router.post("/upload", adminOnly, upload.fields([
     const { title, content, category } = req.body;
     const pdfFile = req.files["pdf"] ? req.files["pdf"][0] : null;
     const thumbnailFile = req.files["thumbnail"] ? req.files["thumbnail"][0] : null;
+
+    console.log(`[POST /api/pdfs/upload] admin=${req.admin?._id || 'unknown'} title="${title}" files=${JSON.stringify(Object.keys(req.files || {}))} folder=${req.folderName}`);
+    console.log(`[upload] pdfFile=${pdfFile ? pdfFile.path : 'none'} thumbnail=${thumbnailFile ? thumbnailFile.path : 'none'}`);
 
     if (!pdfFile) {
       return res.status(400).json({ message: "PDF file is required" });
@@ -172,6 +182,8 @@ router.put("/:id", adminOnly, upload.fields([
     const pdfFile = req.files["pdf"] ? req.files["pdf"][0] : null;
     const thumbnailFile = req.files["thumbnail"] ? req.files["thumbnail"][0] : null;
 
+    console.log(`[PUT /api/pdfs/${req.params.id}] admin=${req.admin?._id || 'unknown'} files=${JSON.stringify(Object.keys(req.files || {}))}`);
+
     // Get old data for audit log
     const oldData = await PdfDocument.findById(req.params.id);
     if (!oldData) {
@@ -190,6 +202,8 @@ router.put("/:id", adminOnly, upload.fields([
     if (thumbnailFile) {
       updateData.thumbnail = `/${thumbnailFile.path.replace(/\\/g, "/")}`;
     }
+
+    console.log(`[PUT] updateData=${JSON.stringify(updateData)}`);
 
     const updated = await PdfDocument.findByIdAndUpdate(
       req.params.id,
@@ -213,6 +227,7 @@ router.put("/:id", adminOnly, upload.fields([
 // DELETE /api/pdfs/:id (admin only)
 router.delete("/:id", adminOnly, async (req, res) => {
   try {
+    console.log(`[DELETE /api/pdfs/${req.params.id}] admin=${req.admin?._id || 'unknown'}`);
     const pdf = await PdfDocument.findById(req.params.id);
     if (!pdf) {
       return res.status(404).json({ success: false, error: "PDF not found" });
@@ -224,12 +239,14 @@ router.delete("/:id", adminOnly, async (req, res) => {
         const pdfPath = path.join(__dirname, '..', pdf.pdfUrl);
         if (fs.existsSync(pdfPath)) {
           fs.unlinkSync(pdfPath);
+          console.log(`[DELETE] removed file ${pdfPath}`);
           // Also try to delete the parent folder if it's empty
           const folderPath = path.dirname(pdfPath);
           try {
             const files = fs.readdirSync(folderPath);
             if (files.length === 0) {
               fs.rmdirSync(folderPath);
+              console.log(`[DELETE] removed folder ${folderPath}`);
             }
           } catch (e) {
             // Ignore if folder not empty or can't delete
@@ -240,6 +257,7 @@ router.delete("/:id", adminOnly, async (req, res) => {
         const thumbPath = path.join(__dirname, '..', pdf.thumbnail);
         if (fs.existsSync(thumbPath)) {
           fs.unlinkSync(thumbPath);
+          console.log(`[DELETE] removed thumbnail ${thumbPath}`);
         }
       }
     } catch (fileError) {
@@ -272,8 +290,10 @@ router.get("/:id", unifiedAuth, async (req, res) => {
       { new: true }
     );
     if (!pdf) {
+      console.log(`[GET /api/pdfs/${req.params.id}] not found`);
       return res.status(404).json({ error: "PDF not found" });
     }
+    console.log(`[GET /api/pdfs/${req.params.id}] returned viewCount=${pdf.viewCount} user=${req.user?._id || req.admin?._id || 'unknown'}`);
     res.json(pdf);
   } catch (error) {
     res.status(500).json({ error: error.message });
