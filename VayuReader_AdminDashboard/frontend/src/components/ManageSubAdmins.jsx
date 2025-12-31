@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import API_CONFIG from '../config/api';
 
 export default function ManageSubAdmins() {
   const [subAdmins, setSubAdmins] = useState([]);
@@ -44,7 +45,7 @@ export default function ManageSubAdmins() {
   const fetchSubAdmins = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:3012/api/sub-admins', {
+      const response = await axios.get(API_CONFIG.subAdmins, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -73,7 +74,7 @@ export default function ManageSubAdmins() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post('http://localhost:3012/api/sub-admins', formData, {
+      const response = await axios.post(API_CONFIG.subAdmins, formData, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -102,7 +103,7 @@ export default function ManageSubAdmins() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.delete(`http://localhost:3012/api/sub-admins/${id}`, {
+      const response = await axios.delete(`${API_CONFIG.subAdmins}/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

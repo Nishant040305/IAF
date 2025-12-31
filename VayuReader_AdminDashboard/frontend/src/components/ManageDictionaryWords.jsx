@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import API_CONFIG from '../config/api';
 
 export default function ManageDictionaryWords() {
   const [words, setWords] = useState([]);
@@ -40,7 +41,7 @@ export default function ManageDictionaryWords() {
 
   const fetchWords = async () => {
     try {
-      const res = await axios.get('http://localhost:3000/api/dictionary/words/all', {
+      const res = await axios.get(`${API_CONFIG.dictionary}/words/all`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.data.success) {
@@ -75,7 +76,7 @@ export default function ManageDictionaryWords() {
     try {
       if (editingId) {
         const res = await axios.put(
-          `http://localhost:3000/api/dictionary/${editingId}`,
+          `${API_CONFIG.dictionary}/${editingId}`,
           payload,
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -86,7 +87,7 @@ export default function ManageDictionaryWords() {
         }
       } else {
         const res = await axios.post(
-          'http://localhost:3000/api/dictionary',
+          API_CONFIG.dictionary,
           payload,
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -131,7 +132,7 @@ export default function ManageDictionaryWords() {
 
     try {
       const res = await axios.delete(
-        `http://localhost:3000/api/dictionary/${id}`,
+        `${API_CONFIG.dictionary}/${id}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data.success) {

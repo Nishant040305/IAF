@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './UploadForm.css';
+import API_CONFIG from '../config/api';
 
 export default function UploadForm() {
   const [formData, setFormData] = useState({
@@ -40,7 +41,7 @@ export default function UploadForm() {
 
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:3005/api/pdfs/upload', {
+      const res = await fetch(`${API_CONFIG.pdfs}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

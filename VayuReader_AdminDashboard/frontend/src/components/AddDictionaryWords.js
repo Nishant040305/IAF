@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import API_CONFIG from '../config/api';
 
 export default function AddDictionaryWords() {
   const [word, setWord] = useState('');
@@ -29,7 +30,7 @@ export default function AddDictionaryWords() {
 
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post('http://localhost:3000/api/dictionary', payload, {
+      const res = await axios.post(API_CONFIG.dictionary, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setMessage('✅ Word added successfully');

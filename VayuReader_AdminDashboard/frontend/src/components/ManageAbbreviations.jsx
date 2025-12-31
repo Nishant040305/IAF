@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import API_CONFIG from '../config/api';
 
 export default function ManageAbbreviations() {
   const [abbreviations, setAbbreviations] = useState([]);
@@ -31,7 +32,7 @@ export default function ManageAbbreviations() {
 
   const fetchAbbreviations = async () => {
     try {
-      const res = await axios.get('http://localhost:3001/api/abbreviations/all', {
+      const res = await axios.get(`${API_CONFIG.abbreviations}/all`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.data.success) {
@@ -52,7 +53,7 @@ export default function ManageAbbreviations() {
     try {
       if (editingId) {
         const res = await axios.put(
-          `http://localhost:3001/api/abbreviations/${editingId}`,
+          `${API_CONFIG.abbreviations}/${editingId}`,
           { abbreviation: formData.abbreviation, fullForm: formData.meaning },
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -64,7 +65,7 @@ export default function ManageAbbreviations() {
         }
       } else {
         const res = await axios.post(
-          'http://localhost:3001/api/abbreviations',
+          API_CONFIG.abbreviations,
           { abbreviation: formData.abbreviation, fullForm: formData.meaning },
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -89,7 +90,7 @@ export default function ManageAbbreviations() {
 
     try {
       const res = await axios.delete(
-        `http://localhost:3001/api/abbreviations/${id}`,
+        `${API_CONFIG.abbreviations}/${id}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data.success) {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import API_CONFIG from '../config/api';
 
 export default function Search() {
   const [query, setQuery] = useState('');
@@ -7,7 +8,7 @@ export default function Search() {
 
   const handleSearch = async () => {
     try {
-      const res = await axios.get(`http://localhost:3005/api/pdfs?search=${query}`);
+      const res = await axios.get(`${API_CONFIG.pdfs}?search=${query}`);
       setResults(res.data);
     } catch {
       alert("Search failed");
@@ -29,7 +30,7 @@ export default function Search() {
         {results.map((pdf) => (
           <li key={pdf._id} className="mt-2">
             <a
-              href={`http://localhost:3005/api/pdfs/${pdf._id}`}
+              href={`${API_CONFIG.pdfs}/${pdf._id}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-700 underline"

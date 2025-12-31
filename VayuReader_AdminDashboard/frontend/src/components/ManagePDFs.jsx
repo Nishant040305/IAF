@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import API_CONFIG from '../config/api';
 
 export default function ManagePDFs() {
   const [pdfs, setPdfs] = useState([]);
@@ -38,7 +39,7 @@ export default function ManagePDFs() {
 
   const fetchPDFs = async () => {
     try {
-      const res = await axios.get('http://localhost:3005/api/pdfs/all', {
+      const res = await axios.get(`${API_CONFIG.pdfs}/all`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.data.success) {
@@ -76,7 +77,7 @@ export default function ManagePDFs() {
     try {
       if (editingId) {
         const res = await axios.put(
-          `http://localhost:3005/api/pdfs/${editingId}`,
+          `${API_CONFIG.pdfs}/${editingId}`,
           payload,
           {
             headers: {
@@ -91,7 +92,7 @@ export default function ManagePDFs() {
         }
       } else {
         const res = await axios.post(
-          'http://localhost:3005/api/pdfs/upload',
+          `${API_CONFIG.pdfs}/upload`,
           payload,
           {
             headers: {
@@ -138,7 +139,7 @@ export default function ManagePDFs() {
 
     try {
       const res = await axios.delete(
-        `http://localhost:3005/api/pdfs/${id}`,
+        `${API_CONFIG.pdfs}/${id}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data.success) {

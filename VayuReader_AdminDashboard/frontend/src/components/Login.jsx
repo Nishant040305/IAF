@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import API_CONFIG from '../config/api';
 
  
 export default function Login() {
@@ -12,7 +13,7 @@ export default function Login() {
     e.preventDefault();
 
     try {
-      const res = await axios.post('http://localhost:3012/api/auth/login', {
+      const res = await axios.post(API_CONFIG.adminAuthLogin, {
         name,
         contact
       });

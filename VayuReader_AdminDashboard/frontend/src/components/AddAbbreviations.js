@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import API_CONFIG from '../config/api';
 
 export default function AddAbbreviations() {
   const [abbreviation, setAbbreviation] = useState('');
@@ -16,7 +17,7 @@ export default function AddAbbreviations() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post('http://localhost:3001/api/abbreviations', {
+      const response = await axios.post(API_CONFIG.abbreviations, {
         abbreviation,
         fullForm: meaning,
       }, {
