@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import React, {
   useCallback,
   useEffect,
@@ -18,15 +17,15 @@ import {
 } from 'react-native';
 
 import SearchBar from '@/components/SearchBar';
+import { ABBR_BASE_URL } from '@/constants/config';
 import { icons } from '@/constants/icons';
 import { images } from '@/constants/images';
+import apiClient from '@/lib/apiClient';
 
 type AbbrevObj = {
   abbreviation: string;
   fullForm: string;
 };
-
-const BASE_URL = 'http://192.168.198.128:4000';
 
 export default function AbbreviationScreen() {
   const [allData, setAllData] = useState<AbbrevObj[]>([]);
@@ -35,7 +34,6 @@ export default function AbbreviationScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Shuffle helper
   const shuffleArray = (arr: AbbrevObj[]) => {
     return arr
       .map((value) => ({ value, sort: Math.random() }))
@@ -46,15 +44,14 @@ export default function AbbreviationScreen() {
   const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${BASE_URL}/api/abbreviations/all`);
-      if (!res.ok) throw new Error(`Status ${res.status}`);
-      const data: AbbrevObj[] = await res.json();
-
+      const res = await apiClient.get<AbbrevObj[]>('/api/abbreviations/all', {
+        baseURL: ABBR_BASE_URL,
+      });
+      const data = res.data;
       const shuffled = shuffleArray(data);
       setAllData(data);
       setInitialData(shuffled.slice(0, 100));
     } catch (err) {
-      console.error('🔥 Fetch all error:', err);
       Alert.alert('Error', 'Failed to load abbreviations.');
     } finally {
       setLoading(false);
@@ -78,11 +75,11 @@ export default function AbbreviationScreen() {
 
     debounceTimer.current = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `${BASE_URL}/api/abbreviations/${query.trim().toUpperCase()}`
+        const res = await apiClient.get<AbbrevObj>(
+          `/api/abbreviations/${query.trim().toUpperCase()}`,
+          { baseURL: ABBR_BASE_URL }
         );
-        if (!res.ok) return;
-        const obj: AbbrevObj = await res.json();
+        const obj = res.data;
 
         setAllData((prev) => {
           const exists = prev.find((p) => p.abbreviation === obj.abbreviation);
@@ -90,7 +87,7 @@ export default function AbbreviationScreen() {
           return [...prev, obj];
         });
       } catch {
-        // silent fail
+        // ignore lookup error
       }
     }, 400);
   }, []);

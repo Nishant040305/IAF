@@ -1,4 +1,4 @@
-package com.nativemedia12.IAF
+package com.vayureader
 
 import android.app.Application
 import android.content.res.Configuration

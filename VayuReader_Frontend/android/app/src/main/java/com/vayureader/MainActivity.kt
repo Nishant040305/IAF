@@ -1,4 +1,4 @@
-package com.nativemedia12.IAF
+package com.vayureader
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

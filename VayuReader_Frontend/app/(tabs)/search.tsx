@@ -7,21 +7,20 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   BackHandler,
   FlatList,
   Image,
   RefreshControl,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 import SearchBar from '@/components/SearchBar';
+import { DICT_BASE_URL } from '@/constants/config';
 import { icons } from '@/constants/icons';
 import { images } from '@/constants/images';
-
-const BASE_URL = 'http://192.168.198.128:4002';
+import apiClient from '@/lib/apiClient';
 
 type WordObj = {
   word: string;
@@ -59,19 +58,14 @@ export default function DictionaryScreen() {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${BASE_URL}/api/dictionary/search/${q}`);
-        if (!res.ok) {
-          console.error('❌ Search failed', res.status);
-          setData([]);
-          return;
-        }
-
-        const result = await res.json();
+        const res = await apiClient.get(`/api/dictionary/search/${q}`, {
+          baseURL: DICT_BASE_URL,
+        });
+        const result = res.data;
         const words: WordObj[] = result.words;
         const filtered = filterValidWords(words);
         setData(filtered);
       } catch (err) {
-        console.error("🔥 Search error:", err);
         setData([]);
       } finally {
         setLoading(false);
@@ -135,7 +129,6 @@ export default function DictionaryScreen() {
         />
       </View>
 
-      {/* Show instruction if no word is searched */}
       {!searchText && data.length === 0 && !loading && (
         <Text
           className="text-center text-gray-400 mb-2 mt-10"
@@ -145,11 +138,10 @@ export default function DictionaryScreen() {
         </Text>
       )}
 
-      {/* Show loading spinner */}
       {loading && (
         <View className="items-center justify-center my-4">
           <ActivityIndicator size="large" color="#5B5FEF" />
-          <Text className="text-white mt-2">Searching…</Text>
+          <Text className="text-white mt-2">Searching...</Text>
         </View>
       )}
 
