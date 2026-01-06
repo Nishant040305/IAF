@@ -10,30 +10,45 @@ const Admin = require('../models/Admin');
 const { generateAdminToken } = require('../services/jwt.service');
 const { generateOtp, saveOtp, verifyOtp, deleteOtp, shouldSkipSend } = require('../services/otp.service');
 const { sendOtpSms } = require('../services/sms.service');
+const { hashPassword, comparePassword } = require('../services/password.service');
 const { logAction, RESOURCE_TYPES, ACTION_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
 const { sanitizePhone, sanitizeName } = require('../utils/sanitize');
 
 // =============================================================================
-// AUTHENTICATION
+// AUTHENTICATION (Password + OTP 2FA)
 // =============================================================================
 
 /**
- * Request OTP for admin login.
+ * Step 1: Verify password and send OTP.
+ * Requires: contact (phone) + password
+ * Returns: Success message (OTP sent to phone)
  */
 const requestLoginOtp = async (req, res, next) => {
     try {
-        const name = sanitizeName(req.body.name);
         const contact = sanitizePhone(req.body.contact);
+        const { password } = req.body;
 
-        // Find admin by name and contact
-        const admin = await Admin.findOne({ name, contact });
+        if (!contact || !password) {
+            return response.badRequest(res, 'Contact and password are required');
+        }
+
+        // Find admin by contact
+        const admin = await Admin.findOne({ contact });
 
         if (!admin) {
+            // Use generic message to prevent user enumeration
             return response.unauthorized(res, 'Invalid credentials');
         }
 
-        // Generate and save OTP to Redis
+        // Verify password (Factor 1: Something you know)
+        const isPasswordValid = await comparePassword(password, admin.passwordHash);
+
+        if (!isPasswordValid) {
+            return response.unauthorized(res, 'Invalid credentials');
+        }
+
+        // Password correct - Generate and send OTP (Factor 2: Something you have)
         const otp = generateOtp();
         await saveOtp(contact, otp);
 
@@ -46,8 +61,8 @@ const requestLoginOtp = async (req, res, next) => {
 
         const responseData = {
             message: isDevMode
-                ? 'OTP generated (DEV MODE - SMS skipped)'
-                : 'OTP request received'
+                ? 'Password verified. OTP generated (DEV MODE - SMS skipped)'
+                : 'Password verified. OTP sent to your phone'
         };
 
         if (isDevMode) {
@@ -61,21 +76,26 @@ const requestLoginOtp = async (req, res, next) => {
 };
 
 /**
- * Verify OTP and complete admin login.
+ * Step 2: Verify OTP and complete admin login.
+ * Requires: contact (phone) + otp
+ * Returns: JWT token + admin info
  */
 const verifyLoginOtp = async (req, res, next) => {
     try {
-        const name = sanitizeName(req.body.name);
         const contact = sanitizePhone(req.body.contact);
         const { otp } = req.body;
 
-        const admin = await Admin.findOne({ name, contact });
+        if (!contact || !otp) {
+            return response.badRequest(res, 'Contact and OTP are required');
+        }
+
+        const admin = await Admin.findOne({ contact });
 
         if (!admin) {
             return response.unauthorized(res, 'Invalid credentials');
         }
 
-        // Verify OTP from Redis
+        // Verify OTP from Redis (Factor 2: Something you have)
         const verification = await verifyOtp(otp, contact);
 
         if (!verification.valid) {
@@ -117,11 +137,16 @@ const getAllSubAdmins = async (req, res, next) => {
 
 /**
  * Create a new sub-admin.
+ * Requires password for the new admin.
  */
 const createSubAdmin = async (req, res, next) => {
     try {
-        const { name, contact, permissions } = req.body;
+        const { name, contact, permissions, password } = req.body;
         const normalizedContact = sanitizePhone(contact);
+
+        if (!password || password.length < 8) {
+            return response.badRequest(res, 'Password must be at least 8 characters');
+        }
 
         // Check for existing admin
         const existing = await Admin.findOne({ contact: normalizedContact });
@@ -134,12 +159,16 @@ const createSubAdmin = async (req, res, next) => {
             ? permissions.filter(p => Admin.PERMISSIONS.includes(p))
             : [];
 
+        // Hash password
+        const passwordHash = await hashPassword(password);
+
         const newAdmin = new Admin({
             name: sanitizeName(name),
             contact: normalizedContact,
             isSuperAdmin: false,
             permissions: validPermissions,
-            createdBy: req.admin.name
+            createdBy: req.admin.name,
+            passwordHash
         });
 
         await newAdmin.save();

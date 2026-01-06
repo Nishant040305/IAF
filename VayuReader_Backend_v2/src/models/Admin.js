@@ -69,6 +69,15 @@ const adminSchema = new mongoose.Schema(
         createdBy: {
             type: String,
             default: 'System'
+        },
+
+        /**
+         * Hashed password for 2FA authentication.
+         * Required for login (Factor 1: Something you know).
+         */
+        passwordHash: {
+            type: String,
+            required: [true, 'Password is required']
         }
     },
     {

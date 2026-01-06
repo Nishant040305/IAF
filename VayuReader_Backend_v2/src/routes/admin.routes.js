@@ -19,30 +19,30 @@ const { authenticateAdmin, requireSuperAdmin } = require('../middleware/adminAut
 const { requireFields, validateObjectId, trimFields } = require('../middleware/validate');
 
 // =============================================================================
-// AUTHENTICATION ROUTES
+// AUTHENTICATION ROUTES (Password + OTP 2FA)
 // =============================================================================
 
 /**
  * POST /api/admin/login/request-otp
- * Request OTP for admin login.
+ * Step 1: Verify password and send OTP.
  */
 router.post(
     '/login/request-otp',
     otpLimiter,
     trimFields,
-    requireFields(['name', 'contact']),
+    requireFields(['contact', 'password']),
     adminController.requestLoginOtp
 );
 
 /**
  * POST /api/admin/login/verify-otp
- * Verify OTP and complete admin login.
+ * Step 2: Verify OTP and complete login.
  */
 router.post(
     '/login/verify-otp',
     loginLimiter,
     trimFields,
-    requireFields(['name', 'contact', 'otp']),
+    requireFields(['contact', 'otp']),
     adminController.verifyLoginOtp
 );
 
