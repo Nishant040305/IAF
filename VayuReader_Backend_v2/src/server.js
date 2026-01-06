@@ -121,6 +121,10 @@ const startServer = async () => {
         // Connect to MongoDB
         await connectDB();
 
+        // Connect to Redis
+        const { connectRedis } = require('./config/redis');
+        await connectRedis();
+
         // Start HTTP server
         app.listen(server.port, () => {
             console.log('');

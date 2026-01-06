@@ -90,4 +90,26 @@ router.delete(
     abbreviationController.deleteAbbreviation
 );
 
+/**
+ * POST /api/abbreviations/bulk
+ * Bulk upload abbreviations (admin only).
+ */
+router.post(
+    '/bulk',
+    authenticateAdmin,
+    requirePermission('manage_abbreviations'),
+    abbreviationController.bulkUpload
+);
+
+/**
+ * GET /api/abbreviations/export
+ * Export all abbreviations (admin only).
+ */
+router.get(
+    '/export/all',
+    authenticateAdmin,
+    requirePermission('manage_abbreviations'),
+    abbreviationController.exportAbbreviations
+);
+
 module.exports = router;

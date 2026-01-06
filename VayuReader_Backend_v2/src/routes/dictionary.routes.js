@@ -117,4 +117,15 @@ router.post(
     dictionaryController.uploadDictionary
 );
 
+/**
+ * GET /api/dictionary/export
+ * Export all words (admin only).
+ */
+router.get(
+    '/export/all',
+    authenticateAdmin,
+    requirePermission('manage_dictionary'),
+    dictionaryController.exportDictionary
+);
+
 module.exports = router;
