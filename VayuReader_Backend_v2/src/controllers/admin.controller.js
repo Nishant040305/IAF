@@ -8,7 +8,7 @@
 
 const Admin = require('../models/Admin');
 const { generateAdminToken } = require('../services/jwt.service');
-const { generateOtp, saveOtp, verifyOtp, deleteOtp, shouldSkipSend } = require('../services/otp.service');
+const { generateOtp, generateLoginToken, saveOtp, verifyOtp, deleteOtp, shouldSkipSend } = require('../services/otp.service');
 const { sendOtpSms } = require('../services/sms.service');
 const { hashPassword, comparePassword } = require('../services/password.service');
 const { logAction, RESOURCE_TYPES, ACTION_TYPES } = require('../services/audit.service');
@@ -16,13 +16,13 @@ const response = require('../utils/response');
 const { sanitizePhone, sanitizeName } = require('../utils/sanitize');
 
 // =============================================================================
-// AUTHENTICATION (Password + OTP 2FA)
+// AUTHENTICATION (Password + OTP 2FA with Login Token)
 // =============================================================================
 
 /**
  * Step 1: Verify password and send OTP.
  * Requires: contact (phone) + password
- * Returns: Success message (OTP sent to phone)
+ * Returns: loginToken (used for OTP verification)
  */
 const requestLoginOtp = async (req, res, next) => {
     try {
@@ -48,9 +48,12 @@ const requestLoginOtp = async (req, res, next) => {
             return response.unauthorized(res, 'Invalid credentials');
         }
 
+        // Generate login token - this will be used to encrypt OTP
+        const loginToken = generateLoginToken();
+
         // Password correct - Generate and send OTP (Factor 2: Something you have)
         const otp = generateOtp();
-        await saveOtp(contact, otp);
+        await saveOtp(contact, otp, loginToken); // OTP encrypted with login token
 
         // Send OTP via SMS (Asynchronously)
         sendOtpSms(contact, otp).catch(err => {
@@ -62,7 +65,8 @@ const requestLoginOtp = async (req, res, next) => {
         const responseData = {
             message: isDevMode
                 ? 'Password verified. OTP generated (DEV MODE - SMS skipped)'
-                : 'Password verified. OTP sent to your phone'
+                : 'Password verified. OTP sent to your phone',
+            loginToken // Return login token to client
         };
 
         if (isDevMode) {
@@ -77,16 +81,16 @@ const requestLoginOtp = async (req, res, next) => {
 
 /**
  * Step 2: Verify OTP and complete admin login.
- * Requires: contact (phone) + otp
- * Returns: JWT token + admin info
+ * Requires: contact (phone) + otp + loginToken
+ * Returns: JWT token as HTTP-only cookie + admin info
  */
 const verifyLoginOtp = async (req, res, next) => {
     try {
         const contact = sanitizePhone(req.body.contact);
-        const { otp } = req.body;
+        const { otp, loginToken } = req.body;
 
-        if (!contact || !otp) {
-            return response.badRequest(res, 'Contact and OTP are required');
+        if (!contact || !otp || !loginToken) {
+            return response.badRequest(res, 'Contact, OTP, and loginToken are required');
         }
 
         const admin = await Admin.findOne({ contact });
@@ -95,8 +99,8 @@ const verifyLoginOtp = async (req, res, next) => {
             return response.unauthorized(res, 'Invalid credentials');
         }
 
-        // Verify OTP from Redis (Factor 2: Something you have)
-        const verification = await verifyOtp(otp, contact);
+        // Verify OTP from Redis using login token (Factor 2: Something you have)
+        const verification = await verifyOtp(otp, contact, loginToken);
 
         if (!verification.valid) {
             return response.badRequest(res, verification.error);
@@ -107,8 +111,17 @@ const verifyLoginOtp = async (req, res, next) => {
 
         const token = generateAdminToken(admin);
 
+        // Set JWT as HTTP-only cookie
+        const isProduction = process.env.NODE_ENV === 'production';
+        res.cookie('admin_token', token, {
+            httpOnly: true,           // Prevents JavaScript access
+            secure: isProduction,     // HTTPS only in production
+            sameSite: 'strict',       // CSRF protection
+            maxAge: 24 * 60 * 60 * 1000, // 24 hours
+            path: '/'
+        });
+
         response.success(res, {
-            token,
             admin: admin.toSafeObject()
         }, 'Login successful');
     } catch (error) {
@@ -218,9 +231,23 @@ const deleteSubAdmin = async (req, res, next) => {
     }
 };
 
+/**
+ * Logout admin by clearing the JWT cookie.
+ */
+const logout = (req, res) => {
+    res.clearCookie('admin_token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/'
+    });
+    response.success(res, null, 'Logged out successfully');
+};
+
 module.exports = {
     requestLoginOtp,
     verifyLoginOtp,
+    logout,
     getAllSubAdmins,
     createSubAdmin,
     deleteSubAdmin

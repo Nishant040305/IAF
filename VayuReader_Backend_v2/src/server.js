@@ -11,6 +11,7 @@ const { server } = require('./config/environment');
 
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 
 // Config
@@ -43,6 +44,9 @@ const app = express();
 // CORS
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+
+// Cookie parser (for JWT in HTTP-only cookies)
+app.use(cookieParser());
 
 // Body parsing
 app.use(express.json({ limit: '50mb' }));

@@ -4,22 +4,34 @@ const { redisClient } = require('../config/redis');
 
 // Prefix for Redis keys
 const KEY_PREFIX = 'vayureader-otp:';
+const TOKEN_PREFIX = 'vayureader-login-token:';
 
 /**
- * Internal helper to derive a 32-byte encryption key from the JWT secret.
+ * Generates a secure random login token.
+ * This token is returned after password verification and used to encrypt the OTP.
+ * @returns {string} 32-character hex token
  */
-const getEncryptionKey = () => {
-    return crypto.createHash('sha256').update(jwtConfig.secret).digest();
+const generateLoginToken = () => {
+    return crypto.randomBytes(16).toString('hex');
 };
 
 /**
- * Encrypts a string using AES-256-GCM.
+ * Derives a 32-byte encryption key from the login token.
+ * @param {string} loginToken 
+ */
+const getEncryptionKeyFromToken = (loginToken) => {
+    return crypto.createHash('sha256').update(loginToken + jwtConfig.secret).digest();
+};
+
+/**
+ * Encrypts a string using AES-256-GCM with login token as key.
  * @param {string} text 
+ * @param {string} loginToken
  * @returns {string} iv:authTag:encrypted (base64)
  */
-const encrypt = (text) => {
+const encrypt = (text, loginToken) => {
     const iv = crypto.randomBytes(12);
-    const key = getEncryptionKey();
+    const key = getEncryptionKeyFromToken(loginToken);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
 
     let encrypted = cipher.update(text, 'utf8', 'base64');
@@ -31,17 +43,18 @@ const encrypt = (text) => {
 };
 
 /**
- * Decrypts a string using AES-256-GCM.
+ * Decrypts a string using AES-256-GCM with login token as key.
  * @param {string} encryptedData iv:authTag:encrypted
+ * @param {string} loginToken
  * @returns {string|null} decrypted text or null on failure
  */
-const decrypt = (encryptedData) => {
+const decrypt = (encryptedData, loginToken) => {
     try {
         const [ivBase64, authTagBase64, encryptedBase64] = encryptedData.split(':');
 
         const iv = Buffer.from(ivBase64, 'base64');
         const authTag = Buffer.from(authTagBase64, 'base64');
-        const key = getEncryptionKey();
+        const key = getEncryptionKeyFromToken(loginToken);
 
         const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
         decipher.setAuthTag(authTag);
@@ -65,45 +78,78 @@ const generateOtp = () => {
 
 /**
  * Saves ENCRYPTED OTP to Redis with a TTL.
+ * OTP is encrypted using the login token.
  * 
- * @param {string} identifier - unique key (e.g., phone or admin id)
+ * @param {string} identifier - unique key (e.g., phone)
  * @param {string} otp - OTP code (plain text)
+ * @param {string} loginToken - login token used for encryption
  * @returns {Promise<void>}
  */
-const saveOtp = async (identifier, otp) => {
+const saveOtp = async (identifier, otp, loginToken) => {
     const key = `${KEY_PREFIX}${identifier}`;
-    const encryptedOtp = encrypt(otp);
+    const encryptedOtp = encrypt(otp, loginToken);
     const ttlSeconds = otpConfig.expiryMinutes * 60;
     await redisClient.set(key, encryptedOtp, {
+        EX: ttlSeconds
+    });
+
+    // Also store the login token hash for validation
+    const tokenKey = `${TOKEN_PREFIX}${identifier}`;
+    const tokenHash = crypto.createHash('sha256').update(loginToken).digest('hex');
+    await redisClient.set(tokenKey, tokenHash, {
         EX: ttlSeconds
     });
 };
 
 /**
- * Retrieves and DECRYPTS OTP from Redis.
+ * Retrieves and DECRYPTS OTP from Redis using login token.
  */
-const getOtp = async (identifier) => {
+const getOtp = async (identifier, loginToken) => {
     const key = `${KEY_PREFIX}${identifier}`;
     const encryptedData = await redisClient.get(key);
 
     if (!encryptedData) return null;
 
-    return decrypt(encryptedData);
+    return decrypt(encryptedData, loginToken);
 };
 
 /**
- * Deletes OTP from Redis.
+ * Deletes OTP and login token from Redis.
  */
 const deleteOtp = async (identifier) => {
     const key = `${KEY_PREFIX}${identifier}`;
+    const tokenKey = `${TOKEN_PREFIX}${identifier}`;
     await redisClient.del(key);
+    await redisClient.del(tokenKey);
 };
 
 /**
- * Verifies an OTP code against Redis value.
+ * Validates that the provided login token matches the stored hash.
  */
-const verifyOtp = async (providedOtp, identifier) => {
-    const storedOtp = await getOtp(identifier);
+const validateLoginToken = async (identifier, loginToken) => {
+    const tokenKey = `${TOKEN_PREFIX}${identifier}`;
+    const storedHash = await redisClient.get(tokenKey);
+
+    if (!storedHash) return false;
+
+    const providedHash = crypto.createHash('sha256').update(loginToken).digest('hex');
+    return storedHash === providedHash;
+};
+
+/**
+ * Verifies an OTP code against Redis value using login token.
+ */
+const verifyOtp = async (providedOtp, identifier, loginToken) => {
+    // First validate the login token
+    const isTokenValid = await validateLoginToken(identifier, loginToken);
+    if (!isTokenValid) {
+        return {
+            valid: false,
+            error: 'Invalid or expired login session. Please login again.'
+        };
+    }
+
+    const storedOtp = await getOtp(identifier, loginToken);
 
     if (!storedOtp) {
         return {
@@ -134,6 +180,7 @@ const shouldSkipSend = () => {
 
 module.exports = {
     generateOtp,
+    generateLoginToken,
     saveOtp,
     getOtp,
     deleteOtp,

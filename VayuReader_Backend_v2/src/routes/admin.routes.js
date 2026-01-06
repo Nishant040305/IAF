@@ -42,9 +42,15 @@ router.post(
     '/login/verify-otp',
     loginLimiter,
     trimFields,
-    requireFields(['contact', 'otp']),
+    requireFields(['contact', 'otp', 'loginToken']),
     adminController.verifyLoginOtp
 );
+
+/**
+ * POST /api/admin/logout
+ * Logout and clear cookie.
+ */
+router.post('/logout', adminController.logout);
 
 // =============================================================================
 // SUB-ADMIN MANAGEMENT ROUTES (Super Admin Only)

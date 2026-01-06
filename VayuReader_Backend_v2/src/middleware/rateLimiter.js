@@ -1,13 +1,32 @@
 /**
  * Rate Limiting Middleware
  * 
- * Provides rate limiting to prevent brute force attacks and API abuse.
+ * Provides rate limiting using Redis for distributed rate limiting.
+ * This ensures rate limits work across multiple server instances.
  * 
  * @module middleware/rateLimiter
  */
 
 const rateLimit = require('express-rate-limit');
+const { RedisStore } = require('rate-limit-redis');
+const { redisClient } = require('../config/redis');
 const { rateLimit: rateLimitConfig } = require('../config/environment');
+
+/**
+ * Create a Redis store for rate limiting.
+ * Falls back to memory store if Redis is not available.
+ */
+const createRedisStore = (prefix) => {
+    try {
+        return new RedisStore({
+            sendCommand: (...args) => redisClient.sendCommand(args),
+            prefix: `rl:${prefix}:`
+        });
+    } catch (error) {
+        console.warn(`[Rate Limiter] Redis store failed for ${prefix}, using memory store:`, error.message);
+        return undefined; // Falls back to default memory store
+    }
+};
 
 /**
  * General API rate limiter.
@@ -16,6 +35,7 @@ const { rateLimit: rateLimitConfig } = require('../config/environment');
 const apiLimiter = rateLimit({
     windowMs: rateLimitConfig.windowMs,
     max: rateLimitConfig.maxRequests,
+    store: createRedisStore('api'),
     message: {
         success: false,
         message: 'Too many requests, please try again later',
@@ -32,6 +52,7 @@ const apiLimiter = rateLimit({
 const otpLimiter = rateLimit({
     windowMs: rateLimitConfig.windowMs,
     max: rateLimitConfig.otpMaxRequests,
+    store: createRedisStore('otp'),
     message: {
         success: false,
         message: 'Too many OTP requests, please try again later',
@@ -48,6 +69,7 @@ const otpLimiter = rateLimit({
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 10, // 10 attempts per window
+    store: createRedisStore('login'),
     message: {
         success: false,
         message: 'Too many login attempts, please try again later',

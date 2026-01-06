@@ -7,30 +7,16 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
+    withCredentials: true, // Include cookies in requests
 });
-
-// Interceptor to add JWT token to every request
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('admin_token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
-    }
-);
 
 // Interceptor to handle unauthorized errors (token expired)
 api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response && (error.response.status === 401)) {
-            localStorage.removeItem('admin_token');
             localStorage.removeItem('admin_info');
-            if (window.location.pathname !== '/login') {
+            if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
                 window.location.href = '/';
             }
         }

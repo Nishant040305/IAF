@@ -11,7 +11,9 @@ const response = require('../utils/response');
 
 /**
  * Authenticates an admin via JWT token.
- * Expects token in Authorization header: "Bearer <token>"
+ * Reads token from:
+ * 1. HTTP-only cookie (admin_token)
+ * 2. Authorization header (Bearer token) - fallback
  * 
  * @param {Object} req - Express request
  * @param {Object} res - Express response
@@ -19,13 +21,23 @@ const response = require('../utils/response');
  */
 const authenticateAdmin = (req, res, next) => {
     try {
-        const authHeader = req.headers.authorization;
+        let token;
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        // Try to get token from cookie first
+        if (req.cookies && req.cookies.admin_token) {
+            token = req.cookies.admin_token;
+        } else {
+            // Fallback to Authorization header
+            const authHeader = req.headers.authorization;
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                token = authHeader.split(' ')[1];
+            }
+        }
+
+        if (!token) {
             return response.unauthorized(res, 'No token provided');
         }
 
-        const token = authHeader.split(' ')[1];
         const decoded = verifyToken(token);
 
         // Ensure it's an admin token
