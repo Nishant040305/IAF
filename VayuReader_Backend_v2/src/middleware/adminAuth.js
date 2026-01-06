@@ -120,13 +120,26 @@ const requirePermission = (permission) => (req, res, next) => {
  */
 const unifiedAuth = (req, res, next) => {
     try {
-        const authHeader = req.headers.authorization;
+        let token;
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        // 1. Check Cookies
+        if (req.cookies) {
+            if (req.cookies.admin_token) token = req.cookies.admin_token;
+            else if (req.cookies.auth_token) token = req.cookies.auth_token;
+        }
+
+        // 2. Fallback to Header
+        if (!token) {
+            const authHeader = req.headers.authorization;
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                token = authHeader.split(' ')[1];
+            }
+        }
+
+        if (!token) {
             return response.unauthorized(res, 'No token provided');
         }
 
-        const token = authHeader.split(' ')[1];
         const decoded = verifyToken(token);
 
         if (decoded.type === 'admin') {

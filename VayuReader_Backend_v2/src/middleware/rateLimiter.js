@@ -19,7 +19,14 @@ const { rateLimit: rateLimitConfig } = require('../config/environment');
 const createRedisStore = (prefix) => {
     try {
         return new RedisStore({
-            sendCommand: (...args) => redisClient.sendCommand(args),
+            sendCommand: async (...args) => {
+                const { connectRedis } = require('../config/redis');
+                // Ensure connection is established before sending command
+                if (!redisClient.isOpen) {
+                    await connectRedis();
+                }
+                return redisClient.sendCommand(args);
+            },
             prefix: `rl:${prefix}:`
         });
     } catch (error) {

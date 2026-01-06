@@ -59,23 +59,25 @@ const searchPdfs = async (req, res, next) => {
     }
 };
 
-/**
- * Get all PDFs with pagination.
- * Query params: page (default 1), limit (default 50, max 200)
- */
 const getAllPdfs = async (req, res, next) => {
     try {
         const page = Math.max(1, parseInt(req.query.page) || 1);
         const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
         const skip = (page - 1) * limit;
+        const { category } = req.query;
+
+        const query = {};
+        if (category) {
+            query.category = category;
+        }
 
         const [documents, total] = await Promise.all([
-            PdfDocument.find({})
+            PdfDocument.find(query)
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .lean(),
-            PdfDocument.countDocuments({})
+            PdfDocument.countDocuments(query)
         ]);
 
         response.success(res, {
@@ -87,6 +89,18 @@ const getAllPdfs = async (req, res, next) => {
                 totalPages: Math.ceil(total / limit)
             }
         });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get distinct PDF categories.
+ */
+const getCategories = async (req, res, next) => {
+    try {
+        const categories = await PdfDocument.distinct('category');
+        response.success(res, categories.filter(c => c).sort());
     } catch (error) {
         next(error);
     }
@@ -268,5 +282,6 @@ module.exports = {
     getPdfById,
     uploadPdf,
     updatePdf,
-    deletePdf
+    deletePdf,
+    getCategories
 };

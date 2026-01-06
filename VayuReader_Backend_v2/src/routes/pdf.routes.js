@@ -88,6 +88,16 @@ router.get(
 );
 
 /**
+ * GET /api/pdfs/categories
+ * Get distinct categories.
+ */
+router.get(
+    '/categories',
+    unifiedAuth,
+    pdfController.getCategories
+);
+
+/**
  * GET /api/pdfs/:id
  * Get single PDF and increment view count.
  */

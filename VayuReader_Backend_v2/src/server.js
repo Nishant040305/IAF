@@ -46,6 +46,7 @@ const app = express();
 const helmet = require('helmet');
 const hpp = require('hpp');
 const compression = require('compression');
+const mongoSanitize = require('express-mongo-sanitize');
 
 // =============================================================================
 // MIDDLEWARE
@@ -56,6 +57,10 @@ app.use(helmet());
 
 // Prevent Parameter Pollution
 app.use(hpp());
+
+// Sanitize MongoDB inputs (NoSQL Injection prevention)
+app.use(mongoSanitize());
+
 
 // Response Compression
 app.use(compression());

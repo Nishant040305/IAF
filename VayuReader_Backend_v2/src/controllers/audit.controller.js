@@ -7,7 +7,7 @@
  */
 
 const AuditLog = require('../models/AuditLog');
-const response = require('../utils/response');
+const { escapeRegex } = require('../utils/sanitize');
 
 /**
  * Get paginated audit logs with optional filters.
@@ -36,7 +36,8 @@ const getLogs = async (req, res, next) => {
         }
 
         if (adminName) {
-            filter.adminName = { $regex: adminName, $options: 'i' };
+            const safeName = escapeRegex(adminName);
+            filter.adminName = { $regex: safeName, $options: 'i' };
         }
 
         if (startDate || endDate) {
