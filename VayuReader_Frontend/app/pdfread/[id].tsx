@@ -3,12 +3,14 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, StyleSheet, Text, View } from 'react-native';
 import Pdf from 'react-native-pdf';
-const BASE_URL = 'http://192.168.205.128:4001';
+
+import { PDF_BASE_URL } from '@/constants/config';
+import apiClient from '@/lib/apiClient';
 
 type PdfDocument = {
   _id: string;
   title: string;
-  pdfUrl: string;       // e.g. "/uploads/... .pdf"
+  pdfUrl: string;
   thumbnail?: string;
   createdAt: string;
   viewCount: number;
@@ -16,45 +18,40 @@ type PdfDocument = {
 };
 
 export default function PdfDetails() {
-
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [doc, setDoc]         = useState<PdfDocument | null>(null);
+  const [doc, setDoc] = useState<PdfDocument | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
-const navigation = useNavigation();
-useLayoutEffect(() => {
-  if (doc?.title) {
-    navigation.setOptions({
-      title: doc.title,
-      headerBackTitle: 'Back',
-      headerTitleAlign: 'center',
-    });
-  }
-}, [doc]);
+  const [error, setError] = useState<string | null>(null);
+  const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    if (doc?.title) {
+      navigation.setOptions({
+        title: doc.title,
+        headerBackTitle: 'Back',
+        headerTitleAlign: 'center',
+      });
+    }
+  }, [doc, navigation]);
 
   useEffect(() => {
-  if (!id) return;
+    if (!id) return;
 
-  (async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${BASE_URL}/api/pdfs/${id}`);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch PDF: ${response.status}`);
+    (async () => {
+      try {
+        setLoading(true);
+        const response = await apiClient.get<PdfDocument>(`/api/pdfs/${id}`, {
+          baseURL: PDF_BASE_URL,
+        });
+        const data = response.data;
+        setDoc(data);
+      } catch (e: any) {
+        setError(e.message || 'Failed to load PDF details.');
+      } finally {
+        setLoading(false);
       }
-
-      const data: PdfDocument = await response.json();
-
-      setDoc(data);
-    } catch (e: any) {
-      setError(e.message || 'Failed to load PDF details.');
-      console.error('🔥 PDF fetch error:', e);
-    } finally {
-      setLoading(false);
-    }
-  })();
-}, [id]);
+    })();
+  }, [id]);
 
   if (loading) {
     return (
@@ -72,34 +69,32 @@ useLayoutEffect(() => {
     );
   }
 
-  // Full URL to the PDF file
   const pdfSource = {
-    uri: `${BASE_URL}${doc.pdfUrl}`,
+    uri: `${PDF_BASE_URL}${doc.pdfUrl}`,
     cache: true,
   };
-  console.log("🔗 PDF URI:", pdfSource.uri);
+
   return (
     <>
-    <Stack>
-      <Stack.Screen
-        options={{
-          title: 'PDF Viewer',
-          headerBackTitle: 'Back',
-          headerTitleAlign: 'center',
-        }}
-      />
-    </Stack>
-    <View style={styles.container}>
-      <Pdf
-        source={pdfSource}
-        style={styles.pdf}
-        trustAllCerts={false}
-        onLoadComplete={(numPages) => {
-          console.log(`Loaded ${numPages} pages`);
-        }}
-        onError={(err) => console.error('PDF load error:', err)}
-      />
-    </View>
+      <Stack>
+        <Stack.Screen
+          options={{
+            title: 'PDF Viewer',
+            headerBackTitle: 'Back',
+            headerTitleAlign: 'center',
+          }}
+        />
+      </Stack>
+      <View style={styles.container}>
+        <Pdf
+          source={pdfSource}
+          style={styles.pdf}
+          trustAllCerts={false}
+          onLoadComplete={() => {
+            // Loaded
+          }}
+        />
+      </View>
     </>
   );
 }

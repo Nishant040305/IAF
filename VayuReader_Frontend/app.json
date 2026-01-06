@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
-    "scheme": "IAF",
+    "scheme": "VayuReader",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -17,14 +17,12 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "usesCleartextTraffic": true,
-      "package": "com.nativemedia12.IAF",
+      "usesCleartextTraffic": false,
+      "package": "com.vayureader",
       "permissions": [
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.DOWNLOAD_WITHOUT_NOTIFICATION",
-        "android.permission.ACCESS_NETWORK_STATE"
-      ]
+        "INTERNET"
+      ],
+      "minSdkVersion": 26
     },
     "web": {
       "bundler": "metro",
@@ -47,12 +45,6 @@
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "25b40b70-4040-4cad-a5b1-8ddc0b9daf93"
-      }
     }
   }
 }

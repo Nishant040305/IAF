@@ -1,59 +1,52 @@
-import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   BackHandler,
   FlatList,
   Image,
+  RefreshControl,
   Text,
   View,
-  RefreshControl,
 } from 'react-native';
 
 import PDFCard from "@/components/PDFCard";
 import SearchBar from "@/components/SearchBar";
+import { PDF_BASE_URL } from '@/constants/config';
 import { icons } from "@/constants/icons";
 import { images } from "@/constants/images";
+import apiClient from '@/lib/apiClient';
 
 type RenderItemProps = { item: PDF };
 type RenderCategoryItemProps = { item: string };
 
 export default function Index() {
-  const router = useRouter();
   const [allPdfs, setAllPdfs] = useState<PDF[]>([]);
   const [activeCat, setActiveCat] = useState<string>('All');
   const [searchText, setSearchText] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  /** ───────────────────────────────
-   * 📦 Fetch PDFs function
-   */
   const fetchPdfs = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://192.168.198.128:4001/api/pdfs/all');
-      if (!response.ok) throw new Error('Failed to fetch PDFs');
-      const data: PDF[] = await response.json();
+      const response = await apiClient.get<PDF[]>('/api/pdfs/all', {
+        baseURL: PDF_BASE_URL,
+      });
+      const data = response.data;
       setAllPdfs(data.map((d) => ({ ...d, id: d._id })));
     } catch (err) {
-      console.error("🔥 Fetch error:", err);
+      Alert.alert('Error', 'Failed to fetch PDFs.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  /** ───────────────────────────────
-   * 🧠 Pull to refresh handler
-   */
   const onRefresh = () => {
     setRefreshing(true);
     fetchPdfs();
   };
 
-  /** ───────────────────────────────
-   * ⏮ Back button clears search
-   */
   useEffect(() => {
     const handleBackPress = () => {
       if (searchText) {
@@ -66,26 +59,24 @@ export default function Index() {
     return () => backHandler.remove();
   }, [searchText]);
 
-  /** ───────────────────────────────
-   * 🔃 Initial fetch
-   */
   useEffect(() => {
     fetchPdfs();
   }, []);
 
-  /** ───────────────────────────────
-   * 🧠 Memoized derived data
-   */
-  const recentData = useMemo(() =>
-    [...allPdfs]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 10), [allPdfs]);
+  const recentData = useMemo(
+    () =>
+      [...allPdfs]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 10),
+    [allPdfs]
+  );
 
   const popularData = useMemo(() => allPdfs.slice(0, 10), [allPdfs]);
 
-  const categories = useMemo(() =>
-    Array.from(new Set(allPdfs.map(p => p.category))),
-    [allPdfs]);
+  const categories = useMemo(
+    () => Array.from(new Set(allPdfs.map(p => p.category))),
+    [allPdfs]
+  );
 
   const searchResults = useMemo(() => {
     const q = searchText.trim().toLowerCase();
@@ -101,9 +92,6 @@ export default function Index() {
 
   const displayData = searchText ? searchResults : gridData;
 
-  /** ───────────────────────────────
-   * 🧱 UI Components
-   */
   const renderHorizontal = ({ item }: RenderItemProps) => (
     <View style={{ marginRight: 12 }}>
       <PDFCard {...item} cardWidth={100} />
@@ -114,7 +102,7 @@ export default function Index() {
     <Text
       onPress={() => setActiveCat(item)}
       className={`px-4 py-2 mr-3 rounded-full ${activeCat === item ? 'bg-[#5B5FEF]' : 'bg-[#1C1B3A]'}`}
-      style={{ color: 'white' ,fontSize: 15 }}
+      style={{ color: 'white', fontSize: 15 }}
     >{item}</Text>
   );
 
@@ -128,8 +116,7 @@ export default function Index() {
     <>
       {!searchText && (
         <>
-          <Text className="text-white font-bold mt-4 mb-5 px-2"
-  style={{ fontSize: 19 }}>
+          <Text className="text-white font-bold mt-4 mb-5 px-2" style={{ fontSize: 19 }}>
             Recently Uploaded PDFs
           </Text>
           <FlatList
@@ -142,8 +129,7 @@ export default function Index() {
           />
           <View className="h-px bg-gray-700 my-2 mt-2" />
 
-          <Text className="text-white font-bold mt-4 mb-5 px-2"
-          style={{ fontSize: 19 }}>
+          <Text className="text-white font-bold mt-4 mb-5 px-2" style={{ fontSize: 19 }}>
             Mostly Accessed PDFs
           </Text>
           <FlatList
@@ -155,8 +141,7 @@ export default function Index() {
             contentContainerStyle={{ paddingLeft: 0, paddingBottom: 8 }}
           />
           <View className="h-px bg-gray-700 my-2 mt-2" />
-          <Text className="text-white  font-bold mt-4 mb-3 px-2"
-          style={{ fontSize: 20 }}>
+          <Text className="text-white  font-bold mt-4 mb-3 px-2" style={{ fontSize: 20 }}>
             Categories
           </Text>
           <FlatList
@@ -168,8 +153,7 @@ export default function Index() {
             contentContainerStyle={{ paddingLeft: 4, paddingBottom: 8 }}
           />
 
-          <Text className="text-white font-bold mt-4 mb-4 px-2"
-          style={{ fontSize: 19}}>
+          <Text className="text-white font-bold mt-4 mb-4 px-2" style={{ fontSize: 19 }}>
             {activeCat === 'All' ? 'All PDF' : `${activeCat} PDF`}
           </Text>
         </>
@@ -177,7 +161,7 @@ export default function Index() {
 
       {searchText && (
         <Text className="text-white text-lg font-bold mt-4 mb-4 px-2">
-          Search results for “{searchText}”
+          Search results for {searchText}
         </Text>
       )}
     </>
@@ -196,7 +180,7 @@ export default function Index() {
       </View>
 
       {loading && (
-        <Text className="text-center text-white mb-4">Loading…</Text>
+        <Text className="text-center text-white mb-4">Loading...</Text>
       )}
 
       <FlatList
@@ -211,7 +195,7 @@ export default function Index() {
         ListEmptyComponent={
           searchText ? (
             <Text className="text-center text-white mt-10">
-              No PDFs match “{searchText}.”
+              No PDFs match {searchText}.
             </Text>
           ) : null
         }
