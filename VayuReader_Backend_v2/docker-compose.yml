@@ -46,6 +46,7 @@ services:
     container_name: vayureader_sms
     restart: unless-stopped
     command: [ "node", "scripts/sms-simulator.js" ]
+    profiles: [ "dev" ] # Only start if --profile dev is used
     ports:
       - "8000:8000" # Expose UI to host
     networks:
