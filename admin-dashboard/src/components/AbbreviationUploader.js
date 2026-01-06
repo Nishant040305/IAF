@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '../utils/api';
 
-const BASE_URL = process.env.REACT_APP_ABBR_BASE_URL;
 const PAGE_SIZE = 10;
 
 // SVG icons
@@ -57,7 +56,7 @@ export default function AbbreviationUploader() {
   const fetchAbbreviations = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${BASE_URL}/api/abbreviations/all`, { timeout: 10000 });
+      const response = await api.get('/api/abbreviations/all', { timeout: 10000 });
       setAbbreviations(response.data);
       setMessage('');
     } catch (error) {
@@ -74,7 +73,7 @@ export default function AbbreviationUploader() {
     }
     try {
       setAddLoading(true);
-      await axios.post(`${BASE_URL}/api/abbreviations`, { abbreviation: abbreviation.trim(), fullForm: fullForm.trim() }, { timeout: 10000 });
+      await api.post('/api/abbreviations', { abbreviation: abbreviation.trim(), fullForm: fullForm.trim() }, { timeout: 10000 });
       setMessage('Abbreviation uploaded successfully');
       setAbbreviation('');
       setFullForm('');
@@ -101,7 +100,7 @@ export default function AbbreviationUploader() {
         const item = parsed[i];
         if (!item.abbreviation || !item.fullForm) throw new Error(`Item ${i + 1} missing required fields`);
       }
-      await axios.post(`${BASE_URL}/api/abbreviations/bulk`, parsed, { timeout: 30000 });
+      await api.post('/api/abbreviations/bulk', parsed, { timeout: 30000 });
       setMessage('Bulk upload successful');
       setBulkJson('');
       await fetchAbbreviations();
@@ -117,7 +116,7 @@ export default function AbbreviationUploader() {
     const blob = new Blob([sample], { type: 'text/csv' });
     const now = new Date();
     const pad = n => n.toString().padStart(2, '0');
-    const timestamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
     const filename = `abbreviation-bulk-upload-${timestamp}.csv`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -142,7 +141,7 @@ export default function AbbreviationUploader() {
         setLoading(false);
         return;
       }
-      await axios.post(`${BASE_URL}/api/abbreviations/bulk`, data, { timeout: 30000 });
+      await api.post('/api/abbreviations/bulk', data, { timeout: 30000 });
       setMessage('CSV bulk upload successful');
       await fetchAbbreviations();
     } catch (err) {
@@ -157,7 +156,7 @@ export default function AbbreviationUploader() {
     if (!window.confirm('Are you sure you want to delete this abbreviation?')) return;
     try {
       setLoading(true);
-      await axios.delete(`${BASE_URL}/api/abbreviations/${id}`);
+      await api.delete(`/api/abbreviations/${id}`);
       setMessage('Abbreviation deleted successfully');
       await fetchAbbreviations();
     } catch (error) {
@@ -180,7 +179,7 @@ export default function AbbreviationUploader() {
     }
     try {
       setLoading(true);
-      await axios.put(`${BASE_URL}/api/abbreviations/${editingId}`, { abbreviation: editAbbreviation.trim(), fullForm: editFullForm.trim() });
+      await api.put(`/api/abbreviations/${editingId}`, { abbreviation: editAbbreviation.trim(), fullForm: editFullForm.trim() });
       setMessage('Abbreviation updated successfully');
       setEditingId(null);
       await fetchAbbreviations();

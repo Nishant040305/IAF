@@ -1,0 +1,158 @@
+/**
+ * Admin Authentication Middleware
+ * 
+ * Verifies JWT tokens for admins and provides role-based access control.
+ * 
+ * @module middleware/adminAuth
+ */
+
+const { verifyToken } = require('../services/jwt.service');
+const response = require('../utils/response');
+
+/**
+ * Authenticates an admin via JWT token.
+ * Expects token in Authorization header: "Bearer <token>"
+ * 
+ * @param {Object} req - Express request
+ * @param {Object} res - Express response
+ * @param {Function} next - Next middleware
+ */
+const authenticateAdmin = (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
+
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return response.unauthorized(res, 'No token provided');
+        }
+
+        const token = authHeader.split(' ')[1];
+        const decoded = verifyToken(token);
+
+        // Ensure it's an admin token
+        if (decoded.type !== 'admin') {
+            return response.unauthorized(res, 'Admin access required');
+        }
+
+        // Attach admin info to request
+        req.admin = {
+            adminId: decoded.adminId,
+            name: decoded.name,
+            contact: decoded.contact,
+            isSuperAdmin: decoded.isSuperAdmin,
+            permissions: decoded.permissions || []
+        };
+
+        next();
+    } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            return response.unauthorized(res, 'Token expired');
+        }
+        return response.unauthorized(res, 'Invalid token');
+    }
+};
+
+/**
+ * Checks if the authenticated admin is a super admin.
+ * Must be used after authenticateAdmin.
+ * 
+ * @param {Object} req - Express request
+ * @param {Object} res - Express response
+ * @param {Function} next - Next middleware
+ */
+const requireSuperAdmin = (req, res, next) => {
+    if (!req.admin) {
+        return response.unauthorized(res, 'Admin authentication required');
+    }
+
+    if (!req.admin.isSuperAdmin) {
+        return response.forbidden(res, 'Super admin access required');
+    }
+
+    next();
+};
+
+/**
+ * Creates middleware that checks for a specific permission.
+ * Must be used after authenticateAdmin.
+ * 
+ * @param {string} permission - Required permission
+ * @returns {Function} Express middleware
+ * 
+ * @example
+ * router.post('/pdfs', authenticateAdmin, requirePermission('manage_pdfs'), createPdf);
+ */
+const requirePermission = (permission) => (req, res, next) => {
+    if (!req.admin) {
+        return response.unauthorized(res, 'Admin authentication required');
+    }
+
+    // Super admins have all permissions
+    if (req.admin.isSuperAdmin) {
+        return next();
+    }
+
+    if (!req.admin.permissions.includes(permission)) {
+        return response.forbidden(res, `Permission required: ${permission}`);
+    }
+
+    next();
+};
+
+/**
+ * Unified authentication for both users and admins.
+ * Users get read-only access, admins get full access.
+ * 
+ * @param {Object} req - Express request
+ * @param {Object} res - Express response
+ * @param {Function} next - Next middleware
+ */
+const unifiedAuth = (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
+
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return response.unauthorized(res, 'No token provided');
+        }
+
+        const token = authHeader.split(' ')[1];
+        const decoded = verifyToken(token);
+
+        if (decoded.type === 'admin') {
+            req.admin = {
+                adminId: decoded.adminId,
+                name: decoded.name,
+                contact: decoded.contact,
+                isSuperAdmin: decoded.isSuperAdmin,
+                permissions: decoded.permissions || []
+            };
+            req.userType = 'admin';
+            return next();
+        }
+
+        if (decoded.type === 'user') {
+            // Users can only access GET methods
+            const readOnlyMethods = ['GET', 'HEAD', 'OPTIONS'];
+            if (!readOnlyMethods.includes(req.method)) {
+                return response.forbidden(res, 'Users can only perform read operations');
+            }
+
+            req.user = { userId: decoded.userId };
+            req.userType = 'user';
+            return next();
+        }
+
+        return response.unauthorized(res, 'Invalid token type');
+    } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            return response.unauthorized(res, 'Token expired');
+        }
+        return response.unauthorized(res, 'Invalid token');
+    }
+};
+
+module.exports = {
+    authenticateAdmin,
+    requireSuperAdmin,
+    requirePermission,
+    unifiedAuth
+};

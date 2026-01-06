@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../utils/api';
 
-const BASE_URL = process.env.REACT_APP_DICT_BASE_URL;
 const PAGE_SIZE = 10;
 
 // SVG icons
@@ -34,12 +33,12 @@ export default function DictionaryUploader() {
   const handleSubmit = () => {
     try {
       const json = JSON.parse(dictionaryJson);
-      axios.post(`${BASE_URL}/api/dictionary/upload`, json)
+      api.post('/api/dictionary/upload', json)
         .then(() => {
           setMessage('✅ Uploaded successfully!');
           setDictionaryJson('');
         })
-        .catch(err => setMessage(`❌ ${err.response?.data?.error || 'Error'}`));
+        .catch(err => setMessage(`❌ ${err.response?.data?.message || err.response?.data?.error || 'Error'}`));
     } catch {
       setMessage('❌ Invalid JSON');
     }
@@ -47,7 +46,7 @@ export default function DictionaryUploader() {
 
   const handleSearch = () => {
     if (!searchTerm.trim()) return;
-    axios.get(`${BASE_URL}/api/dictionary/search/${searchTerm}`)
+    api.get(`/api/dictionary/search/${searchTerm}`)
       .then(res => setSearchResults(res.data.words))
       .catch(() => setSearchResults([]));
     setCurrentPage(1);

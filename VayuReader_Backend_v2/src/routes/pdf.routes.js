@@ -1,0 +1,146 @@
+/**
+ * PDF Routes
+ * 
+ * Defines routes for PDF document operations.
+ * Business logic is in pdf.controller.js.
+ * 
+ * @module routes/pdf.routes
+ */
+
+const express = require('express');
+const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+
+// Controller
+const pdfController = require('../controllers/pdf.controller');
+
+// Middleware
+const { unifiedAuth, authenticateAdmin, requirePermission } = require('../middleware/adminAuth');
+const { validateObjectId, trimFields } = require('../middleware/validate');
+const { ALLOWED_TYPES } = require('../utils/fileValidator');
+
+// =============================================================================
+// FILE UPLOAD CONFIGURATION
+// =============================================================================
+
+const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
+
+// Ensure upload directory exists
+if (!fs.existsSync(UPLOAD_DIR)) {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        if (!req.folderName) {
+            req.folderName = uuidv4();
+        }
+        const uploadPath = path.join(UPLOAD_DIR, req.folderName);
+        fs.mkdirSync(uploadPath, { recursive: true });
+        cb(null, uploadPath);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        cb(null, uuidv4() + ext);
+    }
+});
+
+const fileFilter = (req, file, cb) => {
+    const allowedMimes = [...ALLOWED_TYPES.pdf, ...ALLOWED_TYPES.image];
+    if (allowedMimes.includes(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new Error('Only PDF and image files are allowed'), false);
+    }
+};
+
+const upload = multer({
+    storage,
+    fileFilter,
+    limits: { fileSize: 50 * 1024 * 1024 }
+});
+
+// =============================================================================
+// ROUTES
+// =============================================================================
+
+/**
+ * GET /api/pdfs
+ * Search PDFs with optional query.
+ */
+router.get(
+    '/',
+    unifiedAuth,
+    pdfController.searchPdfs
+);
+
+/**
+ * GET /api/pdfs/all
+ * Get all PDFs.
+ */
+router.get(
+    '/all',
+    unifiedAuth,
+    pdfController.getAllPdfs
+);
+
+/**
+ * GET /api/pdfs/:id
+ * Get single PDF and increment view count.
+ */
+router.get(
+    '/:id',
+    unifiedAuth,
+    validateObjectId,
+    pdfController.getPdfById
+);
+
+/**
+ * POST /api/pdfs/upload
+ * Upload new PDF (admin only).
+ */
+router.post(
+    '/upload',
+    authenticateAdmin,
+    requirePermission('manage_pdfs'),
+    upload.fields([
+        { name: 'pdf', maxCount: 1 },
+        { name: 'thumbnail', maxCount: 1 }
+    ]),
+    trimFields,
+    pdfController.uploadPdf
+);
+
+/**
+ * PUT /api/pdfs/:id
+ * Update PDF (admin only).
+ */
+router.put(
+    '/:id',
+    authenticateAdmin,
+    requirePermission('manage_pdfs'),
+    validateObjectId,
+    upload.fields([
+        { name: 'pdf', maxCount: 1 },
+        { name: 'thumbnail', maxCount: 1 }
+    ]),
+    trimFields,
+    pdfController.updatePdf
+);
+
+/**
+ * DELETE /api/pdfs/:id
+ * Delete PDF (admin only).
+ */
+router.delete(
+    '/:id',
+    authenticateAdmin,
+    requirePermission('manage_pdfs'),
+    validateObjectId,
+    pdfController.deletePdf
+);
+
+module.exports = router;

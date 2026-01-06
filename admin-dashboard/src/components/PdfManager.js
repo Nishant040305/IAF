@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../utils/api';
 import * as pdfjsLib from 'pdfjs-dist/webpack';
 
-//const BASE_URL = "http://localhost:4001";
-
-const BASE_URL = process.env.REACT_APP_PDF_BASE_URL;
 const PAGE_SIZE = 10;
 
 // SVG icons
@@ -68,9 +65,9 @@ export default function PdfManager() {
   };
 
   useEffect(() => {
-    axios.get(`${BASE_URL}/api/pdfs/all`)
+    api.get('/api/pdfs/all')
       .then(res => {
-        setPdfs(res.data);
+        setPdfs(res.data.data || res.data);
       })
       .catch(() => setPdfs([]));
   }, []);
@@ -78,7 +75,7 @@ export default function PdfManager() {
   const handleDeletePdf = async (id) => {
     if (!window.confirm('Are you sure you want to delete this PDF?')) return;
     try {
-      await axios.delete(`${BASE_URL}/api/pdfs/${id}`);
+      await api.delete(`/api/pdfs/${id}`);
       setPdfs(prev => prev.filter(pdf => pdf._id !== id));
     } catch {
       alert('Delete failed');
@@ -120,7 +117,7 @@ export default function PdfManager() {
       canvas.toBlob(async (blob) => {
         if (blob) formData.append('thumbnail', blob, 'thumbnail.jpg');
         try {
-          await axios.post(`${BASE_URL}/api/pdfs/upload`, formData, {
+          await api.post('/api/pdfs/upload', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
           });
           alert('PDF uploaded');
@@ -132,10 +129,10 @@ export default function PdfManager() {
           setShowNewCategoryInput(false);
           setNewCategory('');
           // Refresh list
-          const res = await axios.get(`${BASE_URL}/api/pdfs/all`);
-          setPdfs(res.data);
+          const res = await api.get('/api/pdfs/all');
+          setPdfs(res.data.data || res.data);
         } catch (err) {
-          alert(err.response?.data?.msg || 'Upload error');
+          alert(err.response?.data?.message || err.response?.data?.msg || 'Upload error');
         }
       }, 'image/jpeg');
     };
@@ -161,16 +158,16 @@ export default function PdfManager() {
     formData.append('category', editCategory);
     if (editFile) formData.append('pdf', editFile);
     try {
-      await axios.put(`${BASE_URL}/api/pdfs/${id}`, formData, {
+      await api.put(`/api/pdfs/${id}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       alert('PDF updated successfully');
       setEditId(null);
       // Refresh list
-      const res = await axios.get(`${BASE_URL}/api/pdfs/all`);
-      setPdfs(res.data);
+      const res = await api.get('/api/pdfs/all');
+      setPdfs(res.data.data || res.data);
     } catch (err) {
-      alert(err.response?.data?.msg || 'Update failed');
+      alert(err.response?.data?.message || err.response?.data?.msg || 'Update failed');
     }
   };
 
@@ -189,23 +186,23 @@ export default function PdfManager() {
   return (
     <div style={styles.wrapper}>
       <h2>Upload PDF</h2>
-      <input 
-        type="file" 
-        accept="application/pdf" 
-        onChange={e => setFile(e.target.files[0])} 
-        style={styles.input} 
+      <input
+        type="file"
+        accept="application/pdf"
+        onChange={e => setFile(e.target.files[0])}
+        style={styles.input}
       />
-      <input 
-        placeholder="Title" 
-        value={title} 
-        onChange={e => setTitle(e.target.value)} 
-        style={styles.input} 
+      <input
+        placeholder="Title"
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        style={styles.input}
       />
-      <input 
-        placeholder="Content/Description" 
-        value={content} 
-        onChange={e => setContent(e.target.value)} 
-        style={styles.input} 
+      <input
+        placeholder="Content/Description"
+        value={content}
+        onChange={e => setContent(e.target.value)}
+        style={styles.input}
       />
       <select
         value={showNewCategoryInput ? '__new__' : category}
@@ -334,7 +331,7 @@ export default function PdfManager() {
                       <button
                         style={styles.ghostButtonView}
                         title="View PDF"
-                        onClick={() => window.open(`${BASE_URL}${pdf.pdfUrl}`, '_blank')}
+                        onClick={() => window.open(`${api.defaults.baseURL}${pdf.pdfUrl}`, '_blank')}
                       ><ViewIcon /><span className="btn-label">View</span></button>
                       <button
                         style={styles.ghostButtonDelete}
