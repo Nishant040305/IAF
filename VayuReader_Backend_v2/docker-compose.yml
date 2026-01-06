@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # APP SERVICE (Node.js Backend)
+  # ============================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: vayureader_api
+    restart: unless-stopped
+    depends_on:
+      - mongo
+      - redis
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://mongo:27017/vayureader
+      - MONGODB_TLS=false
+      - REDIS_URL=redis://redis:6379
+      - PORT=3000
+      - ALLOWED_ORIGINS=https://localhost:3000
+      - OTP_GATEWAY_URL=http://sms-simulator:8000/smsc/sends
+    networks:
+      - backend-network
+    volumes:
+      - ./uploads:/usr/src/app/uploads
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3000/health" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ============================================================================
+  # SMS SIMULATOR (Mock Gateway)
+  # ============================================================================
+  sms-simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: vayureader_sms
+    restart: unless-stopped
+    command: [ "node", "scripts/sms-simulator.js" ]
+    ports:
+      - "8000:8000" # Expose UI to host
+    networks:
+      - backend-network
+
+  # ============================================================================
+  # NGINX (Reverse Proxy & Gateway)
+  # ============================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: vayureader_gateway
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      # Check if you want Nginx to serve static files directly:
+      - ./uploads:/usr/src/app/uploads:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  # ============================================================================
+  # MONGODB
+  # ============================================================================
+  mongo:
+    image: mongo:6-jammy
+    container_name: vayureader_db
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - backend-network
+    # In production, binding to localhost is handled by network isolation
+    # command: ["mongod", "--bind_ip_all"]
+
+    # ============================================================================
+    # REDIS
+    # ============================================================================
+  redis:
+    image: redis:alpine
+    container_name: vayureader_cache
+    restart: unless-stopped
+    networks:
+      - backend-network
+
+# ==============================================================================
+# NETWORKS & VOLUMES
+# ==============================================================================
+networks:
+  backend-network:
+    driver: bridge
+
+volumes:
+  mongo-data:

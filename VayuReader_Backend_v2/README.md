@@ -1,4 +1,98 @@
-# VayuReader Backend v2.0
+# VayuReader Backend v2
+
+Secure, scalable, and containerized backend for VayuReader.
+
+## 🚀 Quick Start (Docker)
+
+The easiest way to run the backend, database, and cache is using Docker.
+
+### 1. Prerequisites
+- Docker Desktop installed
+- OpenSSL (for generating local certs)
+
+### 2. Generate SSL Certificates
+Since you have Docker, you can generate certificates without installing OpenSSL on your machine:
+
+**PowerShell (Windows):**
+```powershell
+docker run --rm -v "${PWD}/nginx/certs:/certs" alpine /bin/sh -c "apk add --no-cache openssl && openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /certs/server.key -out /certs/server.crt -subj '/C=US/ST=State/L=City/O=Organization/CN=localhost'"
+```
+
+**Git Bash / Mac / Linux:**
+```bash
+docker run --rm -v "$(pwd)/nginx/certs:/certs" alpine /bin/sh -c "apk add --no-cache openssl && openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /certs/server.key -out /certs/server.crt -subj '/C=US/ST=State/L=City/O=Organization/CN=localhost'"
+```
+
+### 3. Start Application
+```bash
+docker-compose up --build
+```
+- **Backend API**: `https://localhost/api`
+- **Health Check**: `https://localhost/health`
+
+---
+
+## 🛠 Manual Setup (Local Development)
+
+If you prefer to run Node.js locally without Docker:
+
+### 1. Install Dependencies
+```bash
+npm install
+```
+
+### 2. Environment Setup
+Copy `.env.example` to `.env` and fill in:
+```env
+MONGODB_URI=mongodb://localhost:27017/vayureader
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=your_super_secret_key_at_least_32_chars
+OTP_GATEWAY_URL=http://localhost:8000/smsc/sends
+```
+
+### 3. Run SMS Simulator (Optional)
+To test OTPs without a real SMS gateway:
+```bash
+node scripts/sms-simulator.js
+```
+- **UI**: http://localhost:8000
+- **Gateway**: http://localhost:8000/smsc/sends
+
+### 4. Create Super Admin
+To access the admin panel, you need a super admin account.
+
+**Running with Docker:**
+```bash
+# Run this while containers are up
+docker-compose exec app node scripts/seedAdmin.js "Admin User" "9999999999" "StrongPassword123"
+```
+
+**Running Locally:**
+```bash
+node scripts/seedAdmin.js "Admin User" "9999999999" "StrongPassword123"
+```
+
+### 5. Start Server
+```bash
+npm run dev
+```
+
+---
+
+## 🔒 Security Features (Implemented)
+- **Authentication**: JWT in HTTP-Only, Secure, SameSite cookies.
+- **2FA**: OTP-based login for admins and users.
+- **Encryption**: HTTPS enforcement via Nginx + HSTS.
+- **Input Validation**: `express-mongo-sanitize` (NoSQL Injection) + Regex escaping (ReDoS).
+- **Headers**: Helmet security headers.
+- **Rate Limiting**: Redis-based rate limiting per IP.
+
+## 🐳 Docker Stack
+- **App**: Node.js 20 (Alpine)
+- **Gateway**: Nginx (Reverse Proxy + SSL)
+- **Database**: MongoDB 6
+- **Cache**: Redis 7
+.0
 
 Secure, well-structured backend API for VayuReader application.
 

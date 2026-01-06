@@ -60,8 +60,11 @@ const server = {
 const database = {
     uri: process.env.MONGODB_URI,
     options: {
-        // Use TLS in production, but not for localhost
-        tls: process.env.NODE_ENV === 'production' && !process.env.MONGODB_URI.includes('localhost') && !process.env.MONGODB_URI.includes('127.0.0.1'),
+        // Use TLS in production, unless explicitly disabled or running on localhost
+        tls: process.env.MONGODB_TLS !== 'false' && (
+            process.env.MONGODB_TLS === 'true' ||
+            (process.env.NODE_ENV === 'production' && !process.env.MONGODB_URI.includes('localhost') && !process.env.MONGODB_URI.includes('127.0.0.1') && !process.env.MONGODB_URI.includes('mongo'))
+        ),
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
         // Connection pool settings

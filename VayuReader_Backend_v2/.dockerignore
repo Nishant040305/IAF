@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+node_modules
+npm-debug.log
+
+# Build output
+dist
+coverage
+
+# Environment variables (ALWAYS ignore .env in images)
+.env
+.env.production
+.env.development
+
+# Logs/System
+logs
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea

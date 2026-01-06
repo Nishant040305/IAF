@@ -42,6 +42,10 @@ const app = express();
 // MIDDLEWARE
 // =============================================================================
 
+// Enable if you're behind a reverse proxy (Heroku, Bluemix, AWS ELB, Nginx, etc)
+// see https://expressjs.com/en/guide/behind-proxies.html
+app.set('trust proxy', 1);
+
 // Middleware Imports
 const helmet = require('helmet');
 const hpp = require('hpp');
@@ -53,7 +57,13 @@ const mongoSanitize = require('express-mongo-sanitize');
 // =============================================================================
 
 // Security Headers
-app.use(helmet());
+app.use(helmet({
+    hsts: {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: true
+    }
+}));
 
 // Prevent Parameter Pollution
 app.use(hpp());
