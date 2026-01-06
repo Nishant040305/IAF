@@ -23,6 +23,11 @@ const CancelIcon = () => (
 
 export default function PdfManager() {
   const [pdfs, setPdfs] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
+
   const [file, setFile] = useState(null);
   const [thumbnail, setThumbnail] = useState(null);
   const [title, setTitle] = useState('');
@@ -30,19 +35,74 @@ export default function PdfManager() {
   const [category, setCategory] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+
+  // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilterCategory, setSelectedFilterCategory] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Edit State
   const [editId, setEditId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [editCategory, setEditCategory] = useState('');
   const [editFile, setEditFile] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
 
-  const getUniqueCategories = () => {
-    const categories = pdfs.map(pdf => pdf.category).filter(cat => cat);
-    return [...new Set(categories)].sort();
+  // Fetch unique categories (for dropdowns)
+  const fetchCategories = () => {
+    api.get('/api/pdfs/categories')
+      .then(res => setCategories(res.data.data || res.data || []))
+      .catch(() => setCategories([]));
   };
+
+  // Fetch PDFs (Server-Side Pagination)
+  const fetchPdfs = () => {
+    setLoading(true);
+    const params = {
+      page: currentPage,
+      limit: PAGE_SIZE,
+      search: searchTerm || undefined,
+      category: selectedFilterCategory || undefined
+    };
+
+    // Determine endpoint based on search/filter presence
+    // NOTE: getAllPdfs now supports category filter, searchPdfs supports search text
+    // If strict search is needed we use searchPdfs, if just category filtering we use getAllPdfs
+    // Currently backend searchPdfs also searches category text, so it's safe to use searchPdfs if searchTerm exists.
+    // If only category is selected, getAllPdfs is better.
+
+    let endpoint = '/api/pdfs/all';
+    if (searchTerm) {
+      endpoint = '/api/pdfs';
+    }
+
+    api.get(endpoint, { params })
+      .then(res => {
+        const data = res.data.data || res.data;
+        if (data.documents) {
+          setPdfs(data.documents);
+          setTotal(data.pagination.total);
+          setTotalPages(data.pagination.totalPages);
+        } else if (Array.isArray(data)) {
+          // Fallback if backend returns array
+          setPdfs(data);
+        }
+      })
+      .catch(err => {
+        console.error("Fetch error:", err);
+        setPdfs([]);
+      })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    fetchPdfs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, searchTerm, selectedFilterCategory]);
 
   const handleCategoryChange = (e) => {
     const value = e.target.value;
@@ -64,19 +124,12 @@ export default function PdfManager() {
     }
   };
 
-  useEffect(() => {
-    api.get('/api/pdfs/all')
-      .then(res => {
-        setPdfs(res.data.data || res.data);
-      })
-      .catch(() => setPdfs([]));
-  }, []);
-
   const handleDeletePdf = async (id) => {
     if (!window.confirm('Are you sure you want to delete this PDF?')) return;
     try {
       await api.delete(`/api/pdfs/${id}`);
-      setPdfs(prev => prev.filter(pdf => pdf._id !== id));
+      fetchPdfs();
+      fetchCategories(); // Update categories just in case
     } catch {
       alert('Delete failed');
     }
@@ -84,12 +137,12 @@ export default function PdfManager() {
 
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
-    setCurrentPage(1);
+    setCurrentPage(1); // Reset to page 1 on search
   };
 
   const handleCategoryFilter = (e) => {
     setSelectedFilterCategory(e.target.value);
-    setCurrentPage(1);
+    setCurrentPage(1); // Reset to page 1 on filter
   };
 
   const handleUpload = async () => {
@@ -128,9 +181,8 @@ export default function PdfManager() {
           setCategory('');
           setShowNewCategoryInput(false);
           setNewCategory('');
-          // Refresh list
-          const res = await api.get('/api/pdfs/all');
-          setPdfs(res.data.data || res.data);
+          fetchPdfs();
+          fetchCategories();
         } catch (err) {
           alert(err.response?.data?.message || err.response?.data?.msg || 'Upload error');
         }
@@ -163,25 +215,12 @@ export default function PdfManager() {
       });
       alert('PDF updated successfully');
       setEditId(null);
-      // Refresh list
-      const res = await api.get('/api/pdfs/all');
-      setPdfs(res.data.data || res.data);
+      fetchPdfs();
+      fetchCategories();
     } catch (err) {
       alert(err.response?.data?.message || err.response?.data?.msg || 'Update failed');
     }
   };
-
-  // Filtering and pagination
-  const filteredPdfs = pdfs.filter(pdf => {
-    const matchesSearch =
-      pdf.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (pdf.content || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory =
-      !selectedFilterCategory || pdf.category === selectedFilterCategory;
-    return matchesSearch && matchesCategory;
-  });
-  const totalPages = Math.ceil(filteredPdfs.length / PAGE_SIZE) || 1;
-  const paginatedPdfs = filteredPdfs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div style={styles.wrapper}>
@@ -210,7 +249,7 @@ export default function PdfManager() {
         style={styles.input}
       >
         <option value="">Select Category</option>
-        {getUniqueCategories().map(cat => (
+        {categories.map(cat => (
           <option key={cat} value={cat}>{cat}</option>
         ))}
         <option value="__new__">Create new category...</option>
@@ -246,7 +285,7 @@ export default function PdfManager() {
           style={styles.select}
         >
           <option value="">All Categories</option>
-          {getUniqueCategories().map(cat => (
+          {categories.map(cat => (
             <option key={cat} value={cat}>{cat}</option>
           ))}
         </select>
@@ -262,9 +301,11 @@ export default function PdfManager() {
           </tr>
         </thead>
         <tbody>
-          {paginatedPdfs.length === 0 ? (
+          {loading ? (
+            <tr><td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>Loading...</td></tr>
+          ) : pdfs.length === 0 ? (
             <tr><td colSpan={4} style={{ textAlign: 'center', color: '#888' }}>No PDFs found.</td></tr>
-          ) : paginatedPdfs.map((pdf, index) => (
+          ) : pdfs.map((pdf, index) => (
             <tr key={pdf._id} style={index % 2 === 0 ? styles.zebra : {}}>
               <td style={styles.td}>
                 {editId === pdf._id ? (
@@ -285,7 +326,7 @@ export default function PdfManager() {
                     style={styles.select}
                   >
                     <option value="">Select Category</option>
-                    {getUniqueCategories().map(cat => (
+                    {categories.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
