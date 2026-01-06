@@ -48,6 +48,12 @@ router.post(
 );
 
 /**
+ * POST /api/auth/logout
+ * Logout user.
+ */
+router.post('/logout', authController.logout);
+
+/**
  * GET /api/auth/profile
  * Get current user's profile (requires authentication).
  */

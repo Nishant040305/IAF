@@ -50,10 +50,22 @@ Verify OTP and complete user login.
 {
   "success": true,
   "data": {
-    "token": "jwt...",
     "user": { "id": "...", "name": "...", "phone_number": "..." }
   }
 }
+```
+> Cookie `auth_token` is set automatically
+
+---
+
+## User Logout
+`POST /api/auth/logout`
+
+Clear user session cookie.
+
+**Response:**
+```json
+{ "success": true, "message": "Logged out successfully" }
 ```
 
 ---

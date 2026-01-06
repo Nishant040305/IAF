@@ -19,13 +19,21 @@ const response = require('../utils/response');
  */
 const authenticateUser = (req, res, next) => {
     try {
-        const authHeader = req.headers.authorization;
+        let token;
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        // Check cookie first
+        if (req.cookies && req.cookies.auth_token) {
+            token = req.cookies.auth_token;
+        }
+        // Fallback to Authorization header
+        else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+            token = req.headers.authorization.split(' ')[1];
+        }
+
+        if (!token) {
             return response.unauthorized(res, 'No token provided');
         }
 
-        const token = authHeader.split(' ')[1];
         const decoded = verifyToken(token);
 
         // Ensure it's a user token (not admin)
@@ -56,14 +64,22 @@ const authenticateUser = (req, res, next) => {
  * @param {Function} next - Next middleware
  */
 const optionalAuth = (req, res, next) => {
-    const authHeader = req.headers.authorization;
+    let token;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // Check cookie first
+    if (req.cookies && req.cookies.auth_token) {
+        token = req.cookies.auth_token;
+    }
+    // Fallback to Authorization header
+    else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+        token = req.headers.authorization.split(' ')[1];
+    }
+
+    if (!token) {
         return next(); // Continue without user
     }
 
     try {
-        const token = authHeader.split(' ')[1];
         const decoded = verifyToken(token);
 
         if (decoded.type === 'user') {

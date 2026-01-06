@@ -91,10 +91,38 @@ const verifyLoginOtp = async (req, res, next) => {
         // Generate JWT token
         const token = generateUserToken(user._id);
 
+        // Set HTTP-only cookie
+        res.cookie('auth_token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 24 * 60 * 60 * 1000, // 24 hours
+            path: '/'
+        });
+
         response.success(res, {
-            token,
             user: user.toSafeObject()
         }, 'Login successful');
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Logout user.
+ * Clears the auth cookie.
+ */
+const logout = async (req, res, next) => {
+    try {
+        res.cookie('auth_token', '', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 0,
+            path: '/'
+        });
+
+        response.success(res, null, 'Logged out successfully');
     } catch (error) {
         next(error);
     }
@@ -120,5 +148,6 @@ const getProfile = async (req, res, next) => {
 module.exports = {
     requestLoginOtp,
     verifyLoginOtp,
-    getProfile
+    getProfile,
+    logout
 };
