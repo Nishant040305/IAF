@@ -40,15 +40,33 @@ const searchAbbreviations = async (req, res, next) => {
 };
 
 /**
- * Get all abbreviations.
+ * Get all abbreviations with pagination.
+ * Query params: page (default 1), limit (default 100, max 500)
  */
 const getAllAbbreviations = async (req, res, next) => {
     try {
-        const abbreviations = await Abbreviation.find({})
-            .sort({ createdAt: -1 })
-            .lean();
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
+        const skip = (page - 1) * limit;
 
-        response.success(res, abbreviations);
+        const [abbreviations, total] = await Promise.all([
+            Abbreviation.find({})
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Abbreviation.countDocuments({})
+        ]);
+
+        response.success(res, {
+            abbreviations,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
         next(error);
     }

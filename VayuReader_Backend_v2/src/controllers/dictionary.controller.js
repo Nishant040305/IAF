@@ -73,15 +73,33 @@ const getWords = async (req, res, next) => {
 };
 
 /**
- * Get all words.
+ * Get all words with pagination.
+ * Query params: page (default 1), limit (default 100, max 1000)
  */
 const getAllWords = async (req, res, next) => {
     try {
-        const words = await Word.find({})
-            .sort({ word: 1 })
-            .lean();
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit) || 100));
+        const skip = (page - 1) * limit;
 
-        response.success(res, words);
+        const [words, total] = await Promise.all([
+            Word.find({})
+                .sort({ word: 1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Word.countDocuments({})
+        ]);
+
+        response.success(res, {
+            words,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
         next(error);
     }
@@ -229,7 +247,8 @@ const deleteWord = async (req, res, next) => {
 };
 
 /**
- * Bulk upload dictionary.
+ * Bulk upload dictionary with batching.
+ * Inserts in batches of 500 to avoid memory issues.
  */
 const uploadDictionary = async (req, res, next) => {
     try {
@@ -273,22 +292,34 @@ const uploadDictionary = async (req, res, next) => {
             return response.badRequest(res, 'No valid words found');
         }
 
-        const result = await Word.insertMany(words, { ordered: false });
+        // Batch insert in chunks of 500
+        const BATCH_SIZE = 500;
+        let insertedCount = 0;
+        let duplicatesCount = 0;
+
+        for (let i = 0; i < words.length; i += BATCH_SIZE) {
+            const batch = words.slice(i, i + BATCH_SIZE);
+            try {
+                const result = await Word.insertMany(batch, { ordered: false });
+                insertedCount += result.length;
+            } catch (error) {
+                if (error.code === 11000) {
+                    insertedCount += error.result?.insertedIds?.length || 0;
+                    duplicatesCount += error.writeErrors?.length || 0;
+                } else {
+                    throw error;
+                }
+            }
+        }
 
         response.success(res, {
             totalWords: Object.keys(dictionaryData).length,
             processedWords: processedCount,
-            insertedWords: result.length,
+            insertedWords: insertedCount,
+            duplicatesSkipped: duplicatesCount,
             skippedWords: skippedCount
         }, 'Dictionary uploaded successfully');
     } catch (error) {
-        if (error.code === 11000) {
-            const insertedCount = error.result?.insertedIds?.length || 0;
-            return response.success(res, {
-                insertedWords: insertedCount,
-                duplicatesSkipped: error.writeErrors?.length || 0
-            }, 'Dictionary uploaded with some duplicates');
-        }
         next(error);
     }
 };

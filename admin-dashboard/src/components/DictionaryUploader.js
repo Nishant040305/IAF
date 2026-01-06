@@ -8,7 +8,7 @@ import {
   sanitizeString
 } from '../utils/validateUpload';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 50; // Matches backend default
 
 // SVG icons
 const EditIcon = () => (
@@ -41,11 +41,13 @@ export default function DictionaryUploader() {
   const [stagedFileName, setStagedFileName] = useState('');
   const [stagedEntryCount, setStagedEntryCount] = useState(0);
 
-  // Search & Display
+  // Search & Display with server-side pagination
   const [allWords, setAllWords] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalWords, setTotalWords] = useState(0);
 
   // Edit
   const [editingId, setEditingId] = useState(null);
@@ -62,12 +64,22 @@ export default function DictionaryUploader() {
     setMessageType(type);
   };
 
-  // Fetch all words on mount
-  const fetchWords = async () => {
+  // Fetch words with pagination
+  const fetchWords = async (page = 1) => {
     try {
       setLoading(true);
-      const res = await api.get('/api/dictionary/words/all');
-      setAllWords(res.data.data || []);
+      const res = await api.get(`/api/dictionary/words/all?page=${page}&limit=${PAGE_SIZE}`);
+      const data = res.data.data;
+      // Handle paginated response
+      if (data && data.words) {
+        setAllWords(data.words);
+        setTotalPages(data.pagination?.totalPages || 1);
+        setTotalWords(data.pagination?.total || data.words.length);
+        setCurrentPage(data.pagination?.page || 1);
+      } else {
+        // Fallback for old response format
+        setAllWords(Array.isArray(data) ? data : []);
+      }
     } catch (error) {
       showMessage('Failed to load words', 'error');
     } finally {
@@ -76,7 +88,7 @@ export default function DictionaryUploader() {
   };
 
   useEffect(() => {
-    fetchWords();
+    fetchWords(1);
   }, []);
 
   const handleAddSingle = async () => {
@@ -325,8 +337,11 @@ export default function DictionaryUploader() {
 
   // Use searchResults if searching, otherwise show all words
   const displayWords = searchTerm.trim() ? searchResults : allWords;
-  const totalPages = Math.ceil(displayWords.length / PAGE_SIZE) || 1;
-  const paginatedResults = displayWords.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // For search, use client-side pagination; for all words, server already paginated
+  const displayTotalPages = searchTerm.trim() ? Math.ceil(searchResults.length / PAGE_SIZE) || 1 : totalPages;
+  const paginatedResults = searchTerm.trim()
+    ? displayWords.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+    : displayWords; // Server already paginated
 
   return (
     <div style={styles.container}>
@@ -470,9 +485,29 @@ export default function DictionaryUploader() {
           </tbody>
         </table>
         <div style={styles.pagination}>
-          <button style={styles.pageBtn} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Previous</button>
-          <span>Page {currentPage} of {totalPages}</span>
-          <button style={styles.pageBtn} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
+          <button
+            style={styles.pageBtn}
+            onClick={() => {
+              const newPage = Math.max(1, currentPage - 1);
+              setCurrentPage(newPage);
+              if (!searchTerm.trim()) fetchWords(newPage);
+            }}
+            disabled={currentPage === 1}
+          >
+            Previous
+          </button>
+          <span>Page {currentPage} of {displayTotalPages} {totalWords > 0 && `(${totalWords} total)`}</span>
+          <button
+            style={styles.pageBtn}
+            onClick={() => {
+              const newPage = Math.min(displayTotalPages, currentPage + 1);
+              setCurrentPage(newPage);
+              if (!searchTerm.trim()) fetchWords(newPage);
+            }}
+            disabled={currentPage === displayTotalPages}
+          >
+            Next
+          </button>
         </div>
       </div>
     </div>

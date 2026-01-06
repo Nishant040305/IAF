@@ -7,20 +7,24 @@
  */
 
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs').promises;
 const PdfDocument = require('../models/PdfDocument');
 const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
 const { escapeRegex } = require('../utils/sanitize');
 
 /**
- * Search PDFs with optional query.
+ * Search PDFs with optional query and pagination.
+ * Query params: search, page (default 1), limit (default 50, max 200)
  */
 const searchPdfs = async (req, res, next) => {
     try {
         const { search } = req.query;
-        let query = {};
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+        const skip = (page - 1) * limit;
 
+        let query = {};
         if (search) {
             const safeSearch = escapeRegex(search);
             query = {
@@ -32,26 +36,57 @@ const searchPdfs = async (req, res, next) => {
             };
         }
 
-        const documents = await PdfDocument.find(query)
-            .sort({ createdAt: -1 })
-            .lean();
+        const [documents, total] = await Promise.all([
+            PdfDocument.find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            PdfDocument.countDocuments(query)
+        ]);
 
-        response.success(res, documents);
+        response.success(res, {
+            documents,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
         next(error);
     }
 };
 
 /**
- * Get all PDFs.
+ * Get all PDFs with pagination.
+ * Query params: page (default 1), limit (default 50, max 200)
  */
 const getAllPdfs = async (req, res, next) => {
     try {
-        const documents = await PdfDocument.find({})
-            .sort({ createdAt: -1 })
-            .lean();
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+        const skip = (page - 1) * limit;
 
-        response.success(res, documents);
+        const [documents, total] = await Promise.all([
+            PdfDocument.find({})
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            PdfDocument.countDocuments({})
+        ]);
+
+        response.success(res, {
+            documents,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
         next(error);
     }
@@ -167,7 +202,7 @@ const updatePdf = async (req, res, next) => {
 };
 
 /**
- * Delete PDF.
+ * Delete PDF (async file operations).
  */
 const deletePdf = async (req, res, next) => {
     try {
@@ -177,28 +212,43 @@ const deletePdf = async (req, res, next) => {
             return response.notFound(res, 'PDF not found');
         }
 
-        // Delete files if they exist
-        try {
-            if (pdf.pdfUrl) {
-                const pdfPath = path.join(__dirname, '..', '..', pdf.pdfUrl);
-                if (fs.existsSync(pdfPath)) {
-                    fs.unlinkSync(pdfPath);
-                    // Try to remove parent folder if empty
-                    const folderPath = path.dirname(pdfPath);
-                    if (fs.readdirSync(folderPath).length === 0) {
-                        fs.rmdirSync(folderPath);
-                    }
+        // Delete files asynchronously (non-blocking)
+        const deleteFile = async (filePath) => {
+            try {
+                await fs.unlink(filePath);
+            } catch (err) {
+                if (err.code !== 'ENOENT') {
+                    console.error('Error deleting file:', filePath, err.message);
                 }
             }
-            if (pdf.thumbnail) {
-                const thumbPath = path.join(__dirname, '..', '..', pdf.thumbnail);
-                if (fs.existsSync(thumbPath)) {
-                    fs.unlinkSync(thumbPath);
+        };
+
+        const deleteEmptyFolder = async (folderPath) => {
+            try {
+                const files = await fs.readdir(folderPath);
+                if (files.length === 0) {
+                    await fs.rmdir(folderPath);
                 }
+            } catch (err) {
+                // Ignore folder deletion errors
             }
-        } catch (fileError) {
-            console.error('Error deleting files:', fileError);
+        };
+
+        // Delete files in parallel
+        const deleteTasks = [];
+        if (pdf.pdfUrl) {
+            const pdfPath = path.join(__dirname, '..', '..', pdf.pdfUrl);
+            deleteTasks.push(deleteFile(pdfPath).then(() => deleteEmptyFolder(path.dirname(pdfPath))));
         }
+        if (pdf.thumbnail) {
+            const thumbPath = path.join(__dirname, '..', '..', pdf.thumbnail);
+            deleteTasks.push(deleteFile(thumbPath));
+        }
+
+        // Don't wait for file deletion to complete - fire and forget
+        Promise.all(deleteTasks).catch(err => {
+            console.error('Background file deletion error:', err.message);
+        });
 
         await PdfDocument.findByIdAndDelete(req.params.id);
 

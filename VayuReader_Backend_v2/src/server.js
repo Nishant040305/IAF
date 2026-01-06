@@ -22,6 +22,7 @@ const { corsOptions } = require('./config/cors');
 const { apiLimiter } = require('./middleware/rateLimiter');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 const { trimFields } = require('./middleware/validate');
+const { requestTimeout } = require('./middleware/timeout');
 
 // Routes
 const authRoutes = require('./routes/auth.routes');
@@ -57,6 +58,9 @@ app.use(trimFields);
 
 // Rate limiting on all API routes
 app.use('/api', apiLimiter);
+
+// Request timeout (30 seconds default)
+app.use('/api', requestTimeout(30000));
 
 // Static file serving for uploads
 // Set Content-Disposition to prevent inline rendering of potentially dangerous files

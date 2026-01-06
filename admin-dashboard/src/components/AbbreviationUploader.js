@@ -58,8 +58,15 @@ export default function AbbreviationUploader() {
   const fetchAbbreviations = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/abbreviations/all', { timeout: 10000 });
-      setAbbreviations(response.data.data || []);
+      const response = await api.get('/api/abbreviations/all?limit=500', { timeout: 10000 });
+      const data = response.data.data;
+      // Handle paginated response
+      if (data && data.abbreviations) {
+        setAbbreviations(data.abbreviations);
+      } else {
+        // Fallback for old response format
+        setAbbreviations(Array.isArray(data) ? data : []);
+      }
       showMessage('', 'info');
     } catch (error) {
       showMessage('Failed to load abbreviations.', 'error');
