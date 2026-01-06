@@ -168,11 +168,64 @@ const deleteAbbreviation = async (req, res, next) => {
     }
 };
 
+/**
+ * Bulk upload abbreviations.
+ */
+const bulkUpload = async (req, res, next) => {
+    try {
+        const abbreviations = req.body;
+
+        if (!Array.isArray(abbreviations)) {
+            return response.badRequest(res, 'Input must be an array of abbreviations');
+        }
+
+        const formatted = abbreviations.map(item => ({
+            abbreviation: item.abbreviation.toUpperCase(),
+            fullForm: item.fullForm
+        }));
+
+        // Use insertMany with ordered: false to skip duplicates instead of failing
+        const result = await Abbreviation.insertMany(formatted, { ordered: false });
+
+        await logCreate(RESOURCE_TYPES.ABBREVIATION, null, req.admin, {
+            count: result.length,
+            message: 'Bulk upload abbreviations'
+        });
+
+        response.created(res, { count: result.length }, `Successfully uploaded ${result.length} abbreviations`);
+    } catch (error) {
+        if (error.code === 11000) {
+            // Handle duplicate keys gracefully
+            const insertedCount = error.result?.insertedIds?.length || 0;
+            return response.success(res, { count: insertedCount }, `Uploaded ${insertedCount} abbreviations (duplicates skipped)`);
+        }
+        next(error);
+    }
+};
+
+/**
+ * Export all abbreviations.
+ */
+const exportAbbreviations = async (req, res, next) => {
+    try {
+        const abbreviations = await Abbreviation.find({})
+            .sort({ abbreviation: 1 })
+            .select('abbreviation fullForm -_id')
+            .lean();
+
+        response.success(res, abbreviations);
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     searchAbbreviations,
     getAllAbbreviations,
     getAbbreviation,
     createAbbreviation,
     updateAbbreviation,
-    deleteAbbreviation
+    deleteAbbreviation,
+    bulkUpload,
+    exportAbbreviations
 };

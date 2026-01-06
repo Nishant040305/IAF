@@ -8,7 +8,7 @@
 
 const User = require('../models/User');
 const { generateUserToken } = require('../services/jwt.service');
-const { generateOtp, getOtpExpiry, verifyOtp } = require('../services/otp.service');
+const { generateOtp, saveOtp, verifyOtp, deleteOtp, shouldSkipSend } = require('../services/otp.service');
 const { sendOtpSms } = require('../services/sms.service');
 const response = require('../utils/response');
 const { sanitizePhone, sanitizeName } = require('../utils/sanitize');
@@ -31,28 +31,30 @@ const requestLoginOtp = async (req, res, next) => {
             user.name = name;
         }
 
-        // Generate and save OTP
+        // Generate and save OTP to Redis
         const otp = generateOtp();
-        user.setOtp(otp, getOtpExpiry());
+        await saveOtp(phoneNumber, otp);
+
+        // Save user (for name updates/creation)
         await user.save();
 
-        // Send OTP via SMS
-        const smsResult = await sendOtpSms(phoneNumber, otp);
+        // Send OTP via SMS (Asynchronously)
+        sendOtpSms(phoneNumber, otp).catch(err => {
+            console.error(`[SMS Error] Background sending failed for ${phoneNumber}:`, err.message);
+        });
 
-        if (!smsResult.success && !smsResult.devMode) {
-            return response.error(res, 'Failed to send OTP', 502);
-        }
+        const isDevMode = shouldSkipSend();
 
         // Response
         const responseData = {
-            message: smsResult.devMode
+            message: isDevMode
                 ? 'OTP generated (DEV MODE - SMS skipped)'
-                : 'OTP sent successfully'
+                : 'OTP request received'
         };
 
         // Include OTP in dev mode for testing
-        if (smsResult.devMode && smsResult.otp) {
-            responseData.otp = smsResult.otp;
+        if (isDevMode) {
+            responseData.otp = otp;
         }
 
         response.success(res, responseData);
@@ -69,24 +71,22 @@ const verifyLoginOtp = async (req, res, next) => {
         const phoneNumber = sanitizePhone(req.body.phone_number);
         const { otp } = req.body;
 
-        // Find user with OTP fields
-        const user = await User.findOne({ phone_number: phoneNumber })
-            .select('+otpCode +otpExpiresAt');
+        // Find user
+        const user = await User.findOne({ phone_number: phoneNumber });
 
         if (!user) {
             return response.badRequest(res, 'User not found. Please request OTP first.');
         }
 
-        // Verify OTP
-        const verification = verifyOtp(otp, user.otpCode, user.otpExpiresAt);
+        // Verify OTP from Redis
+        const verification = await verifyOtp(otp, phoneNumber);
 
         if (!verification.valid) {
             return response.badRequest(res, verification.error);
         }
 
-        // Clear OTP and save
-        user.clearOtp();
-        await user.save();
+        // Clear OTP from Redis
+        await deleteOtp(phoneNumber);
 
         // Generate JWT token
         const token = generateUserToken(user._id);

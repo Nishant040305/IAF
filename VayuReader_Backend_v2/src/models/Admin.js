@@ -69,23 +69,6 @@ const adminSchema = new mongoose.Schema(
         createdBy: {
             type: String,
             default: 'System'
-        },
-
-        /**
-         * Temporary OTP code for authentication.
-         * Cleared after successful verification.
-         */
-        otpCode: {
-            type: String,
-            select: false
-        },
-
-        /**
-         * OTP expiration timestamp.
-         */
-        otpExpiresAt: {
-            type: Date,
-            select: false
         }
     },
     {
@@ -113,22 +96,6 @@ adminSchema.index({ name: 1 });
 adminSchema.methods.hasPermission = function (permission) {
     if (this.isSuperAdmin) return true;
     return this.permissions.includes(permission);
-};
-
-/**
- * Sets OTP code and expiry.
- */
-adminSchema.methods.setOtp = function (otp, expiresAt) {
-    this.otpCode = otp;
-    this.otpExpiresAt = expiresAt;
-};
-
-/**
- * Clears OTP fields.
- */
-adminSchema.methods.clearOtp = function () {
-    this.otpCode = undefined;
-    this.otpExpiresAt = undefined;
 };
 
 /**

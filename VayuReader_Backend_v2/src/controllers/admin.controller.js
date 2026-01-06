@@ -8,7 +8,7 @@
 
 const Admin = require('../models/Admin');
 const { generateAdminToken } = require('../services/jwt.service');
-const { generateOtp, getOtpExpiry, verifyOtp } = require('../services/otp.service');
+const { generateOtp, saveOtp, verifyOtp, deleteOtp, shouldSkipSend } = require('../services/otp.service');
 const { sendOtpSms } = require('../services/sms.service');
 const { logAction, RESOURCE_TYPES, ACTION_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
@@ -33,26 +33,25 @@ const requestLoginOtp = async (req, res, next) => {
             return response.unauthorized(res, 'Invalid credentials');
         }
 
-        // Generate and save OTP
+        // Generate and save OTP to Redis
         const otp = generateOtp();
-        admin.setOtp(otp, getOtpExpiry());
-        await admin.save();
+        await saveOtp(contact, otp);
 
-        // Send OTP via SMS
-        const smsResult = await sendOtpSms(contact, otp);
+        // Send OTP via SMS (Asynchronously)
+        sendOtpSms(contact, otp).catch(err => {
+            console.error(`[SMS Error] Background sending failed for admin ${contact}:`, err.message);
+        });
 
-        if (!smsResult.success && !smsResult.devMode) {
-            return response.error(res, 'Failed to send OTP', 502);
-        }
+        const isDevMode = shouldSkipSend();
 
         const responseData = {
-            message: smsResult.devMode
+            message: isDevMode
                 ? 'OTP generated (DEV MODE - SMS skipped)'
-                : 'OTP sent successfully'
+                : 'OTP request received'
         };
 
-        if (smsResult.devMode && smsResult.otp) {
-            responseData.otp = smsResult.otp;
+        if (isDevMode) {
+            responseData.otp = otp;
         }
 
         response.success(res, responseData);
@@ -70,21 +69,21 @@ const verifyLoginOtp = async (req, res, next) => {
         const contact = sanitizePhone(req.body.contact);
         const { otp } = req.body;
 
-        const admin = await Admin.findOne({ name, contact })
-            .select('+otpCode +otpExpiresAt');
+        const admin = await Admin.findOne({ name, contact });
 
         if (!admin) {
             return response.unauthorized(res, 'Invalid credentials');
         }
 
-        const verification = verifyOtp(otp, admin.otpCode, admin.otpExpiresAt);
+        // Verify OTP from Redis
+        const verification = await verifyOtp(otp, contact);
 
         if (!verification.valid) {
             return response.badRequest(res, verification.error);
         }
 
-        admin.clearOtp();
-        await admin.save();
+        // Clear OTP from Redis
+        await deleteOtp(contact);
 
         const token = generateAdminToken(admin);
 

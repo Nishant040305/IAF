@@ -36,18 +36,6 @@ const userSchema = new mongoose.Schema(
          * Temporary OTP code for authentication.
          * Cleared after successful verification.
          */
-        otpCode: {
-            type: String,
-            select: false // Don't include in queries by default
-        },
-
-        /**
-         * OTP expiration timestamp.
-         */
-        otpExpiresAt: {
-            type: Date,
-            select: false
-        }
     },
     {
         timestamps: true
@@ -63,25 +51,6 @@ const userSchema = new mongoose.Schema(
 // =============================================================================
 // INSTANCE METHODS
 // =============================================================================
-
-/**
- * Sets OTP code and expiry for the user.
- * 
- * @param {string} otp - OTP code
- * @param {Date} expiresAt - Expiry timestamp
- */
-userSchema.methods.setOtp = function (otp, expiresAt) {
-    this.otpCode = otp;
-    this.otpExpiresAt = expiresAt;
-};
-
-/**
- * Clears OTP fields after successful verification.
- */
-userSchema.methods.clearOtp = function () {
-    this.otpCode = undefined;
-    this.otpExpiresAt = undefined;
-};
 
 /**
  * Returns safe user object for API responses.

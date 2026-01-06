@@ -293,6 +293,38 @@ const uploadDictionary = async (req, res, next) => {
     }
 };
 
+/**
+ * Export all words in the dictionary.
+ */
+const exportDictionary = async (req, res, next) => {
+    try {
+        const words = await Word.find({})
+            .sort({ word: 1 })
+            .lean();
+
+        // Format into { "WORD": { MEANINGS: [...], SYNONYMS: [...], ANTONYMS: [...] } }
+        // to match the bulk upload format
+        const exportData = {};
+
+        words.forEach(w => {
+            exportData[w.word] = {
+                MEANINGS: w.meanings.map(m => [
+                    m.partOfSpeech || '',
+                    m.definition,
+                    m.synonyms || [],
+                    m.examples || []
+                ]),
+                SYNONYMS: w.synonyms || [],
+                ANTONYMS: w.antonyms || []
+            };
+        });
+
+        response.success(res, exportData);
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     lookupWord,
     getWords,
@@ -301,5 +333,6 @@ module.exports = {
     createWord,
     updateWord,
     deleteWord,
-    uploadDictionary
+    uploadDictionary,
+    exportDictionary
 };
