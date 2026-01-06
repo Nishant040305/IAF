@@ -37,7 +37,7 @@ const ACTION_TYPES = {
  * @param {Object} admin - Admin who performed the action
  * @param {Object} [details={}] - Additional details about the action
  */
-const logAction = async (action, resourceType, resourceId, admin, details = {}) => {
+const logAction = (action, resourceType, resourceId, admin, details = {}) => {
     try {
         const auditLog = new AuditLog({
             action,
@@ -50,12 +50,18 @@ const logAction = async (action, resourceType, resourceId, admin, details = {}) 
             timestamp: new Date()
         });
 
-        await auditLog.save();
+        // Fire and forget - don't await, but catch errors
+        auditLog.save()
+            .then(() => {
+                if (process.env.NODE_ENV !== 'production') {
+                    console.log(`📝 Audit: ${action} ${resourceType} by ${admin?.name || 'Unknown'}`);
+                }
+            })
+            .catch(err => console.error('⚠️ Audit logging failed:', err.message));
 
-        console.log(`📝 Audit: ${action} ${resourceType} by ${admin?.name || 'Unknown'}`);
     } catch (error) {
-        // Log error but don't throw - audit should not break main flow
-        console.error('⚠️ Audit logging failed:', error.message);
+        // This catch block would only catch synchronous errors in object creation
+        console.error('⚠️ Audit setup failed:', error.message);
     }
 };
 

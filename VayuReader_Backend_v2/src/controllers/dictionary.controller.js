@@ -11,8 +11,11 @@ const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services
 const response = require('../utils/response');
 const { escapeRegex, createExactMatchRegex } = require('../utils/sanitize');
 
+const { redisClient } = require('../config/redis');
+
 /**
  * Look up a word and get related words.
+ * Cached in Redis for 24 hours.
  */
 const lookupWord = async (req, res, next) => {
     try {
@@ -20,6 +23,14 @@ const lookupWord = async (req, res, next) => {
 
         if (!word) {
             return response.badRequest(res, 'Word parameter is required');
+        }
+
+        const cacheKey = `word:${word.toUpperCase()}`;
+
+        // Check Redis cache
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            return response.success(res, JSON.parse(cachedData));
         }
 
         const safeWord = escapeRegex(word);
@@ -39,7 +50,7 @@ const lookupWord = async (req, res, next) => {
             });
         }
 
-        response.success(res, {
+        const result = {
             word: wordDoc.word,
             meanings: wordDoc.meanings,
             synonyms: wordDoc.synonyms,
@@ -47,7 +58,12 @@ const lookupWord = async (req, res, next) => {
             related: relatedWords
                 .map(w => w.word)
                 .filter(w => w.toLowerCase() !== word.toLowerCase())
-        });
+        };
+
+        // Cache for 24 hours
+        await redisClient.set(cacheKey, JSON.stringify(result), { EX: 86400 });
+
+        response.success(res, result);
     } catch (error) {
         next(error);
     }
@@ -55,18 +71,32 @@ const lookupWord = async (req, res, next) => {
 
 /**
  * Get first 100 words.
+ * Cached in Redis for 1 hour.
  */
 const getWords = async (req, res, next) => {
     try {
+        const cacheKey = 'words:preview:100';
+
+        // Check Redis cache
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            return response.success(res, JSON.parse(cachedData));
+        }
+
         const words = await Word.find()
             .limit(100)
             .select('word')
             .lean();
 
-        response.success(res, {
+        const result = {
             total: words.length,
             words: words.map(w => w.word)
-        });
+        };
+
+        // Cache for 1 hour
+        await redisClient.set(cacheKey, JSON.stringify(result), { EX: 3600 });
+
+        response.success(res, result);
     } catch (error) {
         next(error);
     }

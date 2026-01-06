@@ -42,6 +42,24 @@ const app = express();
 // MIDDLEWARE
 // =============================================================================
 
+// Middleware Imports
+const helmet = require('helmet');
+const hpp = require('hpp');
+const compression = require('compression');
+
+// =============================================================================
+// MIDDLEWARE
+// =============================================================================
+
+// Security Headers
+app.use(helmet());
+
+// Prevent Parameter Pollution
+app.use(hpp());
+
+// Response Compression
+app.use(compression());
+
 // CORS
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
