@@ -1,53 +1,114 @@
-/**
- * OTP Service
- * 
- * Handles OTP generation, storage, and verification.
- * 
- * @module services/otp.service
- */
-
 const crypto = require('crypto');
-const { otp: otpConfig } = require('../config/environment');
+const { otp: otpConfig, jwt: jwtConfig } = require('../config/environment');
+const { redisClient } = require('../config/redis');
+
+// Prefix for Redis keys
+const KEY_PREFIX = 'vayureader-otp:';
+
+/**
+ * Internal helper to derive a 32-byte encryption key from the JWT secret.
+ */
+const getEncryptionKey = () => {
+    return crypto.createHash('sha256').update(jwtConfig.secret).digest();
+};
+
+/**
+ * Encrypts a string using AES-256-GCM.
+ * @param {string} text 
+ * @returns {string} iv:authTag:encrypted (base64)
+ */
+const encrypt = (text) => {
+    const iv = crypto.randomBytes(12);
+    const key = getEncryptionKey();
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
+    let encrypted = cipher.update(text, 'utf8', 'base64');
+    encrypted += cipher.final('base64');
+
+    const authTag = cipher.getAuthTag().toString('base64');
+
+    return `${iv.toString('base64')}:${authTag}:${encrypted}`;
+};
+
+/**
+ * Decrypts a string using AES-256-GCM.
+ * @param {string} encryptedData iv:authTag:encrypted
+ * @returns {string|null} decrypted text or null on failure
+ */
+const decrypt = (encryptedData) => {
+    try {
+        const [ivBase64, authTagBase64, encryptedBase64] = encryptedData.split(':');
+
+        const iv = Buffer.from(ivBase64, 'base64');
+        const authTag = Buffer.from(authTagBase64, 'base64');
+        const key = getEncryptionKey();
+
+        const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+        decipher.setAuthTag(authTag);
+
+        let decrypted = decipher.update(encryptedBase64, 'base64', 'utf8');
+        decrypted += decipher.final('utf8');
+
+        return decrypted;
+    } catch (error) {
+        console.error('[OTP Decryption Error]:', error.message);
+        return null;
+    }
+};
 
 /**
  * Generates a 6-digit OTP code.
- * Uses crypto.randomInt for cryptographic security.
- * 
- * @returns {string} 6-digit OTP code
  */
 const generateOtp = () => {
     return crypto.randomInt(100000, 999999).toString();
 };
 
 /**
- * Calculates OTP expiry time.
+ * Saves ENCRYPTED OTP to Redis with a TTL.
  * 
- * @returns {Date} Expiry timestamp
+ * @param {string} identifier - unique key (e.g., phone or admin id)
+ * @param {string} otp - OTP code (plain text)
+ * @returns {Promise<void>}
  */
-const getOtpExpiry = () => {
-    return new Date(Date.now() + otpConfig.expiryMinutes * 60 * 1000);
+const saveOtp = async (identifier, otp) => {
+    const key = `${KEY_PREFIX}${identifier}`;
+    const encryptedOtp = encrypt(otp);
+    const ttlSeconds = otpConfig.expiryMinutes * 60;
+    await redisClient.set(key, encryptedOtp, {
+        EX: ttlSeconds
+    });
 };
 
 /**
- * Verifies an OTP code against stored values.
- * 
- * @param {string} providedOtp - OTP provided by user
- * @param {string} storedOtp - OTP stored in database
- * @param {Date} expiresAt - Expiry timestamp
- * @returns {{valid: boolean, error: string|null}}
+ * Retrieves and DECRYPTS OTP from Redis.
  */
-const verifyOtp = (providedOtp, storedOtp, expiresAt) => {
-    if (!storedOtp || !expiresAt) {
-        return {
-            valid: false,
-            error: 'No active OTP. Please request a new one.'
-        };
-    }
+const getOtp = async (identifier) => {
+    const key = `${KEY_PREFIX}${identifier}`;
+    const encryptedData = await redisClient.get(key);
 
-    if (new Date() > new Date(expiresAt)) {
+    if (!encryptedData) return null;
+
+    return decrypt(encryptedData);
+};
+
+/**
+ * Deletes OTP from Redis.
+ */
+const deleteOtp = async (identifier) => {
+    const key = `${KEY_PREFIX}${identifier}`;
+    await redisClient.del(key);
+};
+
+/**
+ * Verifies an OTP code against Redis value.
+ */
+const verifyOtp = async (providedOtp, identifier) => {
+    const storedOtp = await getOtp(identifier);
+
+    if (!storedOtp) {
         return {
             valid: false,
-            error: 'OTP has expired. Please request a new one.'
+            error: 'OTP has expired or does not exist. Please request a new one.'
         };
     }
 
@@ -66,8 +127,6 @@ const verifyOtp = (providedOtp, storedOtp, expiresAt) => {
 
 /**
  * Checks if OTP sending should be skipped (dev mode).
- * 
- * @returns {boolean}
  */
 const shouldSkipSend = () => {
     return otpConfig.skipSend;
@@ -75,7 +134,9 @@ const shouldSkipSend = () => {
 
 module.exports = {
     generateOtp,
-    getOtpExpiry,
+    saveOtp,
+    getOtp,
+    deleteOtp,
     verifyOtp,
     shouldSkipSend
 };

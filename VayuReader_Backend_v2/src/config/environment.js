@@ -60,8 +60,8 @@ const server = {
 const database = {
     uri: process.env.MONGODB_URI,
     options: {
-        // Use TLS in production
-        tls: process.env.NODE_ENV === 'production',
+        // Use TLS in production, but not for localhost
+        tls: process.env.NODE_ENV === 'production' && !process.env.MONGODB_URI.includes('localhost') && !process.env.MONGODB_URI.includes('127.0.0.1'),
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000
     }
@@ -102,11 +102,19 @@ const rateLimit = {
     otpMaxRequests: parseInt(process.env.OTP_RATE_LIMIT_MAX || '5', 10)
 };
 
+/**
+ * Redis configuration
+ */
+const redis = {
+    url: process.env.REDIS_URL || 'redis://localhost:6379'
+};
+
 module.exports = {
     server,
     database,
     jwt,
     otp,
     cors,
-    rateLimit
+    rateLimit,
+    redis
 };
