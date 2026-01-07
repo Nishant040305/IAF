@@ -30,6 +30,35 @@ router.get(
     abbreviationController.searchAbbreviations
 );
 
+// =============================================================================
+// AUTHENTICATED ROUTES (must be before /:abbr wildcard)
+// =============================================================================
+
+/**
+ * GET /api/abbreviations/all
+ * Get all abbreviations with pagination.
+ */
+router.get(
+    '/all',
+    unifiedAuth,
+    abbreviationController.getAllAbbreviations
+);
+
+/**
+ * GET /api/abbreviations/export/all
+ * Export all abbreviations (admin only).
+ */
+router.get(
+    '/export/all',
+    authenticateAdmin,
+    requirePermission('manage_abbreviations'),
+    abbreviationController.exportAbbreviations
+);
+
+// =============================================================================
+// PUBLIC WILDCARD ROUTE (must be after specific routes)
+// =============================================================================
+
 /**
  * GET /api/abbreviations/:abbr
  * Look up specific abbreviation.
@@ -37,20 +66,6 @@ router.get(
 router.get(
     '/:abbr',
     abbreviationController.getAbbreviation
-);
-
-// =============================================================================
-// AUTHENTICATED ROUTES
-// =============================================================================
-
-/**
- * GET /api/abbreviations/all
- * Get all abbreviations.
- */
-router.get(
-    '/all',
-    unifiedAuth,
-    abbreviationController.getAllAbbreviations
 );
 
 /**
@@ -101,17 +116,6 @@ router.post(
     authenticateAdmin,
     requirePermission('manage_abbreviations'),
     abbreviationController.bulkUpload
-);
-
-/**
- * GET /api/abbreviations/export
- * Export all abbreviations (admin only).
- */
-router.get(
-    '/export/all',
-    authenticateAdmin,
-    requirePermission('manage_abbreviations'),
-    abbreviationController.exportAbbreviations
 );
 
 module.exports = router;

@@ -47,6 +47,12 @@ router.post(
 );
 
 /**
+ * GET /api/admin/me
+ * Get current authenticated admin info (for session validation).
+ */
+router.get('/me', authenticateAdmin, adminController.getCurrentAdmin);
+
+/**
  * POST /api/admin/logout
  * Logout and clear cookie.
  */

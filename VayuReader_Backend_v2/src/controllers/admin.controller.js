@@ -116,7 +116,7 @@ const verifyLoginOtp = async (req, res, next) => {
         res.cookie('admin_token', token, {
             httpOnly: true,           // Prevents JavaScript access
             secure: isProduction,     // HTTPS only in production
-            sameSite: 'strict',       // CSRF protection
+            sameSite: 'lax',       // CSRF protection
             maxAge: 24 * 60 * 60 * 1000, // 24 hours
             path: '/'
         });
@@ -232,13 +232,26 @@ const deleteSubAdmin = async (req, res, next) => {
 };
 
 /**
+ * Get current authenticated admin info.
+ * Used for session validation on page reload.
+ */
+const getCurrentAdmin = async (req, res, next) => {
+    try {
+        // req.admin is populated by authenticateAdmin middleware
+        response.success(res, req.admin);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Logout admin by clearing the JWT cookie.
  */
 const logout = (req, res) => {
     res.clearCookie('admin_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'lax',
         path: '/'
     });
     response.success(res, null, 'Logged out successfully');
@@ -248,6 +261,7 @@ module.exports = {
     requestLoginOtp,
     verifyLoginOtp,
     logout,
+    getCurrentAdmin,
     getAllSubAdmins,
     createSubAdmin,
     deleteSubAdmin
