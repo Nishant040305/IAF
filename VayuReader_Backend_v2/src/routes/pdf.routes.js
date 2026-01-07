@@ -39,8 +39,11 @@ const storage = multer.diskStorage({
             req.folderName = uuidv4();
         }
         const uploadPath = path.join(UPLOAD_DIR, req.folderName);
-        fs.mkdirSync(uploadPath, { recursive: true });
-        cb(null, uploadPath);
+        // Use async mkdir to prevent blocking the event loop
+        fs.mkdir(uploadPath, { recursive: true }, (err) => {
+            if (err) return cb(err);
+            cb(null, uploadPath);
+        });
     },
     filename: (req, file, cb) => {
         const ext = path.extname(file.originalname);
