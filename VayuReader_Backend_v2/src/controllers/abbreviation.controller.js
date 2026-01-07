@@ -11,14 +11,36 @@ const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services
 const response = require('../utils/response');
 const { escapeRegex, createExactMatchRegex } = require('../utils/sanitize');
 
+const { redisClient } = require('../config/redis');
+const { invalidateAbbreviation, invalidateAllAbbreviationCaches } = require('../services/cache.service');
+
+// Cache TTL constants (in seconds)
+const CACHE_TTL = {
+    ABBREVIATION_LOOKUP: 86400,  // 24 hours
+    ALL_ABBREVIATIONS: 3600,     // 1 hour (for full list)
+    SEARCH_RESULTS: 1800         // 30 minutes for search results
+};
+
 /**
  * Search abbreviations.
+ * Cached for 30 minutes.
  */
 const searchAbbreviations = async (req, res, next) => {
     try {
         const { search } = req.query;
-        let query = {};
 
+        // Create cache key based on search term
+        const cacheKey = search
+            ? `abbr:search:${search.toUpperCase()}`
+            : 'abbr:all';
+
+        // Check Redis cache first
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            return response.success(res, JSON.parse(cachedData));
+        }
+
+        let query = {};
         if (search) {
             const safeSearch = escapeRegex(search);
             query = {
@@ -32,6 +54,11 @@ const searchAbbreviations = async (req, res, next) => {
         const abbreviations = await Abbreviation.find(query)
             .sort({ abbreviation: 1 })
             .lean();
+
+        // Cache results
+        await redisClient.set(cacheKey, JSON.stringify(abbreviations), {
+            EX: search ? CACHE_TTL.SEARCH_RESULTS : CACHE_TTL.ALL_ABBREVIATIONS
+        });
 
         response.success(res, abbreviations);
     } catch (error) {
@@ -74,6 +101,7 @@ const getAllAbbreviations = async (req, res, next) => {
 
 /**
  * Look up specific abbreviation.
+ * Cached for 24 hours.
  */
 const getAbbreviation = async (req, res, next) => {
     try {
@@ -83,6 +111,14 @@ const getAbbreviation = async (req, res, next) => {
             return response.badRequest(res, 'Abbreviation parameter is required');
         }
 
+        const cacheKey = `abbr:${abbr.toUpperCase()}`;
+
+        // Check Redis cache first
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            return response.success(res, JSON.parse(cachedData));
+        }
+
         const result = await Abbreviation.findOne({
             abbreviation: createExactMatchRegex(abbr)
         }).lean();
@@ -90,6 +126,11 @@ const getAbbreviation = async (req, res, next) => {
         if (!result) {
             return response.notFound(res, 'Abbreviation not found');
         }
+
+        // Cache for 24 hours
+        await redisClient.set(cacheKey, JSON.stringify(result), {
+            EX: CACHE_TTL.ABBREVIATION_LOOKUP
+        });
 
         response.success(res, result);
     } catch (error) {
@@ -125,6 +166,9 @@ const createAbbreviation = async (req, res, next) => {
             fullForm: newAbbr.fullForm
         });
 
+        // Invalidate relevant caches
+        await invalidateAbbreviation(newAbbr.abbreviation);
+
         response.created(res, newAbbr, 'Abbreviation created successfully');
     } catch (error) {
         next(error);
@@ -157,6 +201,12 @@ const updateAbbreviation = async (req, res, next) => {
             new: { abbreviation: updated.abbreviation, fullForm: updated.fullForm }
         });
 
+        // Invalidate caches for both old and new abbreviation
+        await invalidateAbbreviation(oldAbbr.abbreviation);
+        if (oldAbbr.abbreviation !== updated.abbreviation) {
+            await invalidateAbbreviation(updated.abbreviation);
+        }
+
         response.success(res, updated, 'Abbreviation updated successfully');
     } catch (error) {
         next(error);
@@ -179,6 +229,9 @@ const deleteAbbreviation = async (req, res, next) => {
         await logDelete(RESOURCE_TYPES.ABBREVIATION, req.params.id, req.admin, {
             abbreviation: abbr.abbreviation
         });
+
+        // Invalidate cache
+        await invalidateAbbreviation(abbr.abbreviation);
 
         response.success(res, null, 'Abbreviation deleted successfully');
     } catch (error) {
@@ -210,11 +263,16 @@ const bulkUpload = async (req, res, next) => {
             message: 'Bulk upload abbreviations'
         });
 
+        // Invalidate all abbreviation caches after bulk upload
+        await invalidateAllAbbreviationCaches();
+
         response.created(res, { count: result.length }, `Successfully uploaded ${result.length} abbreviations`);
     } catch (error) {
         if (error.code === 11000) {
             // Handle duplicate keys gracefully
             const insertedCount = error.result?.insertedIds?.length || 0;
+            // Still invalidate cache even for partial success
+            await invalidateAllAbbreviationCaches();
             return response.success(res, { count: insertedCount }, `Uploaded ${insertedCount} abbreviations (duplicates skipped)`);
         }
         next(error);

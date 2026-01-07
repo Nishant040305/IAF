@@ -8,6 +8,7 @@
 
 const AuditLog = require('../models/AuditLog');
 const { escapeRegex } = require('../utils/sanitize');
+const response = require('../utils/response');
 
 /**
  * Get paginated audit logs with optional filters.

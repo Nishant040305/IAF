@@ -12,6 +12,7 @@ const response = require('../utils/response');
 const { escapeRegex, createExactMatchRegex } = require('../utils/sanitize');
 
 const { redisClient } = require('../config/redis');
+const { invalidateWord, invalidateAllDictionaryCaches } = require('../services/cache.service');
 
 /**
  * Look up a word and get related words.
@@ -200,6 +201,9 @@ const createWord = async (req, res, next) => {
             word: newWord.word
         });
 
+        // Invalidate cache
+        await invalidateWord(newWord.word);
+
         response.created(res, newWord, 'Word added successfully');
     } catch (error) {
         next(error);
@@ -247,6 +251,12 @@ const updateWord = async (req, res, next) => {
             new: { word: updated.word }
         });
 
+        // Invalidate cache for both old and new word
+        await invalidateWord(oldWord.word);
+        if (oldWord.word !== updated.word) {
+            await invalidateWord(updated.word);
+        }
+
         response.success(res, updated, 'Word updated successfully');
     } catch (error) {
         next(error);
@@ -269,6 +279,9 @@ const deleteWord = async (req, res, next) => {
         await logDelete(RESOURCE_TYPES.DICTIONARY, req.params.id, req.admin, {
             word: word.word
         });
+
+        // Invalidate cache
+        await invalidateWord(word.word);
 
         response.success(res, null, 'Word deleted successfully');
     } catch (error) {
@@ -341,6 +354,9 @@ const uploadDictionary = async (req, res, next) => {
                 }
             }
         }
+
+        // Invalidate all dictionary caches after bulk upload
+        await invalidateAllDictionaryCaches();
 
         response.success(res, {
             totalWords: Object.keys(dictionaryData).length,

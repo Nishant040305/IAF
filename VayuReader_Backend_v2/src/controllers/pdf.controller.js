@@ -13,6 +13,16 @@ const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services
 const response = require('../utils/response');
 const { escapeRegex } = require('../utils/sanitize');
 
+const { redisClient } = require('../config/redis');
+
+// Cache TTL constants (in seconds)
+const CACHE_TTL = {
+    PDF_METADATA: 3600,      // 1 hour for individual PDF metadata
+    CATEGORIES: 3600,        // 1 hour for categories list
+    PDF_LIST: 1800,          // 30 minutes for PDF listings
+    SEARCH_RESULTS: 900      // 15 minutes for search results
+};
+
 /**
  * Search PDFs with optional query and pagination.
  * Query params: search, page (default 1), limit (default 50, max 200)
@@ -96,11 +106,25 @@ const getAllPdfs = async (req, res, next) => {
 
 /**
  * Get distinct PDF categories.
+ * Cached for 1 hour.
  */
 const getCategories = async (req, res, next) => {
     try {
+        const cacheKey = 'pdf:categories';
+
+        // Check cache first
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            return response.success(res, JSON.parse(cachedData));
+        }
+
         const categories = await PdfDocument.distinct('category');
-        response.success(res, categories.filter(c => c).sort());
+        const result = categories.filter(c => c).sort();
+
+        // Cache for 1 hour
+        await redisClient.set(cacheKey, JSON.stringify(result), { EX: CACHE_TTL.CATEGORIES });
+
+        response.success(res, result);
     } catch (error) {
         next(error);
     }
