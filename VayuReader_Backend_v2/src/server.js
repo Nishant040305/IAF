@@ -31,6 +31,7 @@ const auditRoutes = require('./routes/audit.routes');
 const pdfRoutes = require('./routes/pdf.routes');
 const dictionaryRoutes = require('./routes/dictionary.routes');
 const abbreviationRoutes = require('./routes/abbreviation.routes');
+const sseRoutes = require('./routes/sse.routes');
 
 // =============================================================================
 // APP INITIALIZATION
@@ -124,6 +125,7 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/pdfs', pdfRoutes);
 app.use('/api/dictionary', dictionaryRoutes);
 app.use('/api/abbreviations', abbreviationRoutes);
+app.use('/api/events', sseRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -138,7 +140,8 @@ app.get('/', (req, res) => {
             audit: '/api/audit',
             pdfs: '/api/pdfs',
             dictionary: '/api/dictionary',
-            abbreviations: '/api/abbreviations'
+            abbreviations: '/api/abbreviations',
+            events: '/api/events'
         }
     });
 });

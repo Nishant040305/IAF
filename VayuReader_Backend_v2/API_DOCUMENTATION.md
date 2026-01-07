@@ -449,6 +449,38 @@ Batches in 500-word chunks.
 
 ---
 
+# 🔔 Real-Time Events (SSE)
+
+## Connect to Events Stream
+`GET /api/events`
+
+**Requires:** Auth (User or Admin)
+
+Establishes a Server-Sent Events connection for real-time PDF updates.
+
+**Headers:**
+```
+Accept: text/event-stream
+```
+
+**Events:**
+| Event | Trigger | Payload |
+|-------|---------|---------|
+| `connected` | Connection established | `{ message }` |
+| `PDF_ADDED` | New PDF uploaded | `{ id, title, category, createdAt, timestamp }` |
+| `PDF_UPDATED` | PDF modified | `{ id, title, category, updatedAt, timestamp }` |
+| `PDF_DELETED` | PDF removed | `{ id, title, timestamp }` |
+
+**Example:**
+```javascript
+const es = new EventSource('/api/events?token=YOUR_TOKEN');
+es.addEventListener('PDF_ADDED', (e) => console.log(JSON.parse(e.data)));
+```
+
+> See [SSE_INTEGRATION.md](./SSE_INTEGRATION.md) for detailed client integration examples.
+
+---
+
 # 📊 Audit Logs
 
 ## Get Audit Logs

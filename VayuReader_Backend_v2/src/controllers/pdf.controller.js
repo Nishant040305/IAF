@@ -10,6 +10,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const PdfDocument = require('../models/PdfDocument');
 const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services/audit.service');
+const { publishPdfEvent, PDF_EVENTS } = require('../services/pubsub.service');
 const response = require('../utils/response');
 const { escapeRegex } = require('../utils/sanitize');
 
@@ -189,6 +190,14 @@ const uploadPdf = async (req, res, next) => {
             category: newDoc.category
         });
 
+        // Publish real-time event
+        await publishPdfEvent(PDF_EVENTS.ADDED, {
+            id: newDoc._id.toString(),
+            title: newDoc.title,
+            category: newDoc.category,
+            createdAt: newDoc.createdAt
+        });
+
         response.created(res, newDoc, 'PDF uploaded successfully');
     } catch (error) {
         next(error);
@@ -231,6 +240,14 @@ const updatePdf = async (req, res, next) => {
         await logUpdate(RESOURCE_TYPES.PDF, updated._id, req.admin, {
             old: { title: oldDoc.title },
             new: { title: updated.title }
+        });
+
+        // Publish real-time event
+        await publishPdfEvent(PDF_EVENTS.UPDATED, {
+            id: updated._id.toString(),
+            title: updated.title,
+            category: updated.category,
+            updatedAt: updated.updatedAt
         });
 
         response.success(res, updated, 'PDF updated successfully');
@@ -291,6 +308,12 @@ const deletePdf = async (req, res, next) => {
         await PdfDocument.findByIdAndDelete(req.params.id);
 
         await logDelete(RESOURCE_TYPES.PDF, req.params.id, req.admin, {
+            title: pdf.title
+        });
+
+        // Publish real-time event
+        await publishPdfEvent(PDF_EVENTS.DELETED, {
+            id: req.params.id,
             title: pdf.title
         });
 

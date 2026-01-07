@@ -31,7 +31,20 @@ const connectRedis = async () => {
     return redisClient;
 };
 
+/**
+ * Creates a new Redis client for Pub/Sub subscriptions.
+ * Redis Pub/Sub requires dedicated clients for subscribers.
+ * 
+ * @returns {Promise<RedisClient>} Connected subscriber client
+ */
+const createSubscriberClient = async () => {
+    const subscriber = redisClient.duplicate();
+    await subscriber.connect();
+    return subscriber;
+};
+
 module.exports = {
     redisClient,
-    connectRedis
+    connectRedis,
+    createSubscriberClient
 };
