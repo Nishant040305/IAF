@@ -276,7 +276,10 @@ export default function DictionaryUploader() {
   const handleSearch = () => {
     if (!searchTerm.trim()) return;
     api.get(`/api/dictionary/search/${searchTerm}`)
-      .then(res => setSearchResults(res.data.data.words || []))
+      .then(res => {
+        const data = res.data.data;
+        setSearchResults(Array.isArray(data) ? data : (data.words || []));
+      })
       .catch(() => setSearchResults([]));
     setCurrentPage(1);
   };

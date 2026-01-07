@@ -138,27 +138,39 @@ const getAllWords = async (req, res, next) => {
 
 /**
  * Search words.
+ * Cached in Redis for 30 minutes.
  */
 const searchWords = async (req, res, next) => {
     try {
-        const searchTerm = req.params.term;
+        // Support both path parameter and query parameter
+        const searchTerm = req.params.term || req.query.search || req.query.term;
 
         if (!searchTerm) {
             return response.badRequest(res, 'Search term is required');
         }
 
+        const cacheKey = `word:search:${searchTerm.toUpperCase()}`;
+
+        // Check Redis cache
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            return response.success(res, JSON.parse(cachedData));
+        }
+
         const safeSearch = escapeRegex(searchTerm);
 
+        // search in word field (primary)
         const results = await Word.find({
             word: { $regex: safeSearch, $options: 'i' }
         })
-            .limit(20)
+            .limit(50)
+            .select('word meanings synonyms antonyms')
             .lean();
 
-        response.success(res, {
-            total: results.length,
-            words: results
-        });
+        // Cache search results for 30 minutes
+        await redisClient.set(cacheKey, JSON.stringify(results), { EX: 1800 });
+
+        response.success(res, results);
     } catch (error) {
         next(error);
     }

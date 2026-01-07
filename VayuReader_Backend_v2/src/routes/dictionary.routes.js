@@ -30,6 +30,16 @@ router.get(
     dictionaryController.lookupWord
 );
 
+/**
+ * GET /api/dictionary/search
+ * GET /api/dictionary/search/:term
+ * Search words (Public).
+ */
+router.get(
+    '/search/:term?',
+    dictionaryController.searchWords
+);
+
 // =============================================================================
 // AUTHENTICATED ROUTES
 // =============================================================================
@@ -52,16 +62,6 @@ router.get(
     '/words/all',
     unifiedAuth,
     dictionaryController.getAllWords
-);
-
-/**
- * GET /api/dictionary/search/:term
- * Search words.
- */
-router.get(
-    '/search/:term',
-    unifiedAuth,
-    dictionaryController.searchWords
 );
 
 // =============================================================================

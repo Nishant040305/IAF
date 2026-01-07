@@ -18,7 +18,7 @@ const { unifiedAuth, authenticateAdmin, requirePermission } = require('../middle
 const { validateObjectId, trimFields, requireFields } = require('../middleware/validate');
 
 // =============================================================================
-// ROUTES
+// PUBLIC ROUTES
 // =============================================================================
 
 /**
@@ -27,9 +27,21 @@ const { validateObjectId, trimFields, requireFields } = require('../middleware/v
  */
 router.get(
     '/',
-    unifiedAuth,
     abbreviationController.searchAbbreviations
 );
+
+/**
+ * GET /api/abbreviations/:abbr
+ * Look up specific abbreviation.
+ */
+router.get(
+    '/:abbr',
+    abbreviationController.getAbbreviation
+);
+
+// =============================================================================
+// AUTHENTICATED ROUTES
+// =============================================================================
 
 /**
  * GET /api/abbreviations/all
@@ -39,16 +51,6 @@ router.get(
     '/all',
     unifiedAuth,
     abbreviationController.getAllAbbreviations
-);
-
-/**
- * GET /api/abbreviations/:abbr
- * Look up specific abbreviation.
- */
-router.get(
-    '/:abbr',
-    unifiedAuth,
-    abbreviationController.getAbbreviation
 );
 
 /**
