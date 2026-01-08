@@ -37,12 +37,14 @@ const requestLoginOtp = async (req, res, next) => {
         const admin = await Admin.findOne({ contact });
 
         if (!admin) {
+            console.log(`[AUTH DEBUG] Admin not found for contact: ${contact}`);
             // Use generic message to prevent user enumeration
             return response.unauthorized(res, 'Invalid credentials');
         }
 
         // Verify password (Factor 1: Something you know)
         const isPasswordValid = await comparePassword(password, admin.passwordHash);
+        console.log(`[AUTH DEBUG] Password check for ${contact}: ${isPasswordValid}`);
 
         if (!isPasswordValid) {
             return response.unauthorized(res, 'Invalid credentials');

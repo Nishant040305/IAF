@@ -44,10 +44,10 @@ export default function AbbreviationScreen() {
   const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get<AbbrevObj[]>('/api/abbreviations/all', {
+      const res = await apiClient.get<any>('/api/abbreviations/all', {
         baseURL: ABBR_BASE_URL,
       });
-      const data = res.data;
+      const data = res.data.data.abbreviations;
       const shuffled = shuffleArray(data);
       setAllData(data);
       setInitialData(shuffled.slice(0, 100));
@@ -108,8 +108,8 @@ export default function AbbreviationScreen() {
     const q = searchText.trim().toLowerCase();
     return q
       ? allData.filter((item) =>
-          item.abbreviation.toLowerCase().startsWith(q)
-        )
+        item.abbreviation.toLowerCase().startsWith(q)
+      )
       : initialData;
   }, [searchText, allData, initialData]);
 

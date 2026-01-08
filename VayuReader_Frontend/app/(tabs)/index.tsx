@@ -29,11 +29,11 @@ export default function Index() {
   const fetchPdfs = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get<PDF[]>('/api/pdfs/all', {
+      const response = await apiClient.get<any>('/api/pdfs/all', {
         baseURL: PDF_BASE_URL,
       });
-      const data = response.data;
-      setAllPdfs(data.map((d) => ({ ...d, id: d._id })));
+      const data = response.data.data.documents;
+      setAllPdfs(data.map((d: any) => ({ ...d, id: d._id })));
     } catch (err) {
       Alert.alert('Error', 'Failed to fetch PDFs.');
     } finally {

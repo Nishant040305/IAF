@@ -17,12 +17,12 @@ services:
     env_file:
       - .env
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - MONGODB_URI=mongodb://mongo:27017/vayureader
       - MONGODB_TLS=false
       - REDIS_URL=redis://redis:6379
       - PORT=3000
-      - ALLOWED_ORIGINS=https://localhost:3000
+      - ALLOWED_ORIGINS=http://localhost:3000,https://localhost:3000,http://localhost:3001,https://localhost:3001
       - OTP_GATEWAY_URL=http://sms-simulator:8000/smsc/sends
     networks:
       - backend-network

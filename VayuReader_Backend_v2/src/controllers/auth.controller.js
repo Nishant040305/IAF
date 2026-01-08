@@ -101,7 +101,8 @@ const verifyLoginOtp = async (req, res, next) => {
         });
 
         response.success(res, {
-            user: user.toSafeObject()
+            user: user.toSafeObject(),
+            token
         }, 'Login successful');
     } catch (error) {
         next(error);

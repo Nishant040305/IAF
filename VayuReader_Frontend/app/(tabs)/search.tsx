@@ -58,11 +58,10 @@ export default function DictionaryScreen() {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await apiClient.get(`/api/dictionary/search/${q}`, {
+        const res = await apiClient.get<any>(`/api/dictionary/search/${q}`, {
           baseURL: DICT_BASE_URL,
         });
-        const result = res.data;
-        const words: WordObj[] = result.words;
+        const words: WordObj[] = res.data.data;
         const filtered = filterValidWords(words);
         setData(filtered);
       } catch (err) {

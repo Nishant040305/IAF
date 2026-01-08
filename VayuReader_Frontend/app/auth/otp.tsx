@@ -71,19 +71,29 @@ const OtpScreen = () => {
         { baseURL: AUTH_BASE_URL }
       );
 
-      const token = response.data?.token as string | undefined;
-      const userFromApi = response.data?.user as AuthUser | undefined;
+      console.log('[OTP] Verification Success. Data:', response.data);
+
+      const token = response.data?.data?.token as string | undefined;
+      const userFromApi = response.data?.data?.user as AuthUser | undefined;
+
+      console.log('[OTP] Extracted Token:', token);
+
       if (!token) {
-        throw new Error('Token missing in response');
+        throw new Error('Token missing in server response (check JSON path)');
       }
 
       await signIn(token, userFromApi || (name && phoneNumber ? { name, phone_number: phoneNumber } : undefined));
       router.replace('/(tabs)');
     } catch (err: any) {
-      const message = err?.response?.data?.message || 'OTP verification failed. Try again.';
-      setError(message);
-      Alert.alert('Verification failed', message, [
-        { text: 'OK', onPress: () => router.replace('/auth/login') },
+      console.error('[OTP] Verification Catch:', err);
+      const serverMessage = err?.response?.data?.message;
+      const internalMessage = err?.message;
+      const finalMessage = serverMessage || internalMessage || 'Unknown error during verification';
+
+      setError(finalMessage);
+      Alert.alert('Verification failed', `Error: ${finalMessage}\n\nTrace: ${internalMessage || 'No trace'}`, [
+        { text: 'OK' },
+        { text: 'Reset Login', onPress: () => router.replace('/auth/login') },
       ]);
     } finally {
       setLoading(false);
@@ -125,9 +135,8 @@ const OtpScreen = () => {
               onKeyPress={(e) => handleKeyPress(e, idx)}
               keyboardType="number-pad"
               maxLength={1}
-              className={`w-12 h-14 rounded-xl text-center text-white text-xl font-bold border ${
-                active ? 'border-[#5B5FEF]' : 'border-[#2a2540]'
-              } bg-[#1c1731]`}
+              className={`w-12 h-14 rounded-xl text-center text-white text-xl font-bold border ${active ? 'border-[#5B5FEF]' : 'border-[#2a2540]'
+                } bg-[#1c1731]`}
               returnKeyType="done"
             />
           );

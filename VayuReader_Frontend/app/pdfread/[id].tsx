@@ -40,10 +40,10 @@ export default function PdfDetails() {
     (async () => {
       try {
         setLoading(true);
-        const response = await apiClient.get<PdfDocument>(`/api/pdfs/${id}`, {
+        const response = await apiClient.get<any>(`/api/pdfs/${id}`, {
           baseURL: PDF_BASE_URL,
         });
-        const data = response.data;
+        const data = response.data.data;
         setDoc(data);
       } catch (e: any) {
         setError(e.message || 'Failed to load PDF details.');

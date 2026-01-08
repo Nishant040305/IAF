@@ -13,19 +13,34 @@ type AuthContextShape = {
 
 const AuthContext = createContext<AuthContextShape | undefined>(undefined);
 
+const base64Decode = (str: string): string => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  let output = '';
+  str = String(str).replace(/[=]+$/, '');
+  if (str.length % 4 === 1) throw new Error('Invalid base64 string');
+  for (
+    let bc = 0, bs = 0, buffer, idx = 0;
+    (buffer = str.charAt(idx++));
+    ~buffer && ((bs = bc % 4 ? bs * 64 + buffer : buffer), bc++ % 4)
+      ? (output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6))))
+      : 0
+  ) {
+    buffer = chars.indexOf(buffer);
+  }
+  return output;
+};
+
 const getJwtExpiryMs = (token: string): number | null => {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
-    const decoded = globalThis.atob
-      ? globalThis.atob(padded)
-      : Buffer.from(padded, 'base64').toString('binary');
+    const decoded = base64Decode(payload);
     const json = JSON.parse(decoded);
     if (json?.exp) return Number(json.exp) * 1000;
     return null;
-  } catch {
+  } catch (error) {
+    console.warn('Failed to parse JWT expiry:', error);
     return null;
   }
 };
@@ -49,7 +64,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
     expiryTimeout.current = setTimeout(() => {
       doSignOut();
-    }, msLeft);
+    }, msLeft) as unknown as NodeJS.Timeout;
   }, []);
 
   useEffect(() => {

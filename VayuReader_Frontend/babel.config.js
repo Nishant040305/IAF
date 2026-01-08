@@ -28,7 +28,6 @@ module.exports = function (api) {
           alias: { "@": "./" },
         },
       ],
-      "nativewind/babel",
       "react-native-reanimated/plugin", // MUST be last
     ],
   };
