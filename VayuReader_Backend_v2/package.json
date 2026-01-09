@@ -10,7 +10,8 @@
         "lint": "eslint src/",
         "lint:fix": "eslint src/ --fix",
         "db:optimize": "node scripts/optimizeDb.js",
-        "db:seed": "node scripts/seedAdmin.js"
+        "db:seed": "node scripts/seedAdmin.js",
+        "sms-simulator": "node scripts/sms-simulator.js"
     },
     "keywords": [
         "vayureader",
