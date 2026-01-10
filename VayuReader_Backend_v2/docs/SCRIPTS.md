@@ -403,6 +403,60 @@ Total documents: 1,890
 
 ---
 
+## cleanupLogs.js
+
+**Purpose**: Delete old audit logs to free up space.
+
+### Usage
+
+```bash
+node scripts/cleanupLogs.js --days <number> [--dry-run]
+```
+
+### Arguments
+
+- `--days` - Retention period in days (records older than this will be deleted)
+- `--dry-run` - Simulate deletion without actually removing data
+
+### Example
+
+```bash
+# Delete logs older than 90 days
+node scripts/cleanupLogs.js --days 90
+
+# Dry run to see what would be deleted
+node scripts/cleanupLogs.js --days 60 --dry-run
+```
+
+### Output
+
+```
+Cleanup Configuration:
+- Retention Days: 90
+- Cutoff Date: 2023-10-12T10:00:00.000Z
+- Mode: LIVE
+
+Found logs older than 90 days:
+- UserAudit: 1,500 records
+- AuditLog: 250 records
+
+Deleting old UserAudit logs...
+✓ Deleted 1500 UserAudit records
+
+Deleting old AuditLog logs...
+✓ Deleted 250 AuditLog records
+
+Cleanup completed successfully!
+```
+
+### Notes
+
+- Targets both `UserAudit` and `AuditLog` collections
+- Recommended to run via cron job provided in `docs/SCRIPTS.md`
+- Backup database before running with short retention periods
+
+---
+
 ## sms-simulator.js
 
 **Purpose**: Simulate SMS gateway for development (no actual SMS sent).
@@ -706,4 +760,5 @@ npm run script:name -- arg1 arg2
 | `create-user.js` | Create test user | As needed | ❌ No |
 | `optimizeDb.js` | Database optimization | Weekly | ❌ No |
 | `syncElasticsearch.js` | Elasticsearch sync | Daily | ⚠️ Full re-index |
+| `cleanupLogs.js` | Delete old logs | Monthly | ✅ Yes |
 | `sms-simulator.js` | SMS gateway simulator | Dev only | ❌ No |

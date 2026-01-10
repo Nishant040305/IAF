@@ -12,7 +12,8 @@
         "db:optimize": "node scripts/optimizeDb.js",
         "db:seed": "node scripts/seedAdmin.js",
         "sms-simulator": "node scripts/sms-simulator.js",
-        "es:sync": "node scripts/syncElasticsearch.js"
+        "es:sync": "node scripts/syncElasticsearch.js",
+        "logs:clean": "node scripts/cleanupLogs.js"
     },
     "keywords": [
         "vayureader",
