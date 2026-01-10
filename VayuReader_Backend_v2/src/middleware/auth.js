@@ -41,9 +41,12 @@ const authenticateUser = (req, res, next) => {
             return response.unauthorized(res, 'Invalid token type');
         }
 
-        // Attach user info to request
+        // Attach user info to request (includes userId, phone_number, deviceId, name)
         req.user = {
-            userId: decoded.userId
+            userId: decoded.userId,
+            phone_number: decoded.phone_number,
+            deviceId: decoded.deviceId,
+            name: decoded.name
         };
 
         next();
@@ -83,7 +86,12 @@ const optionalAuth = (req, res, next) => {
         const decoded = verifyToken(token);
 
         if (decoded.type === 'user') {
-            req.user = { userId: decoded.userId };
+            req.user = {
+                userId: decoded.userId,
+                phone_number: decoded.phone_number,
+                deviceId: decoded.deviceId,
+                name: decoded.name
+            };
         } else if (decoded.type === 'admin') {
             req.admin = decoded;
         }

@@ -126,8 +126,12 @@ const verifyLoginOtp = async (req, res, next) => {
         // Log login event
         logLogin(user, sanitizedDeviceId);
 
-        // Generate lifetime JWT token
-        const token = generateLifetimeUserToken(user._id, { deviceId: sanitizedDeviceId });
+        // Generate lifetime JWT token with user details
+        const token = generateLifetimeUserToken(user._id, {
+            deviceId: sanitizedDeviceId,
+            phone_number: user.phone_number,
+            name: user.name
+        });
 
         // Set HTTP-only cookie with long expiration
         const isTesting = process.env.TESTING === 'true';

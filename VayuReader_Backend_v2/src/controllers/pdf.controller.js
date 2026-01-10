@@ -147,11 +147,11 @@ const getPdfById = async (req, res, next) => {
             return response.notFound(res, 'PDF not found');
         }
 
-        // Log PDF read event for authenticated users
+        // Log PDF read event for authenticated users (all details from JWT)
         if (req.user && req.user.userId) {
             logPdfRead(
-                { userId: req.user.userId, phone_number: req.user.phone_number || 'unknown' },
-                req.body.deviceId || req.headers['x-device-id'] || 'unknown',
+                { userId: req.user.userId, phone_number: req.user.phone_number },
+                req.user.deviceId,
                 { pdfId: pdf._id.toString(), title: pdf.title }
             );
         }
