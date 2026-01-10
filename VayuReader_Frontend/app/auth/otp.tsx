@@ -22,9 +22,10 @@ import { AuthUser } from '@/lib/authStorage';
 const OtpScreen = () => {
   const router = useRouter();
   const { signIn } = useAuth();
-  const params = useLocalSearchParams<{ phone_number?: string; name?: string }>();
+  const params = useLocalSearchParams<{ phone_number?: string; name?: string; deviceId?: string }>();
   const phoneNumber = useMemo(() => params.phone_number ?? '', [params.phone_number]);
   const name = useMemo(() => params.name ?? '', [params.name]);
+  const deviceId = useMemo(() => params.deviceId ?? '', [params.deviceId]);
 
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
@@ -67,7 +68,7 @@ const OtpScreen = () => {
       setLoading(true);
       const response = await apiClient.post(
         '/api/auth/login/verify-otp',
-        { phone_number: phoneNumber, otp: otpValue },
+        { phone_number: phoneNumber, otp: otpValue, deviceId },
         { baseURL: AUTH_BASE_URL }
       );
 
@@ -110,7 +111,7 @@ const OtpScreen = () => {
       setResending(true);
       await apiClient.post(
         '/api/auth/login/request-otp',
-        { name, phone_number: phoneNumber },
+        { name, phone_number: phoneNumber, deviceId },
         { baseURL: AUTH_BASE_URL }
       );
     } catch (err: any) {
@@ -129,7 +130,7 @@ const OtpScreen = () => {
           return (
             <TextInput
               key={idx}
-              ref={(el) => (inputRefs.current[idx] = el)}
+              ref={(el) => { inputRefs.current[idx] = el; }}
               value={digits[idx]}
               onChangeText={(val) => handleDigitChange(val, idx)}
               onKeyPress={(e) => handleKeyPress(e, idx)}

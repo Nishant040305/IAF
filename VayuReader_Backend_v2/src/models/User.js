@@ -33,9 +33,12 @@ const userSchema = new mongoose.Schema(
         },
 
         /**
-         * Temporary OTP code for authentication.
-         * Cleared after successful verification.
+         * Unique identifier for the device (locked for authentication).
          */
+        deviceId: {
+            type: String,
+            trim: true
+        }
     },
     {
         timestamps: true
@@ -59,7 +62,8 @@ userSchema.methods.toSafeObject = function () {
     return {
         id: this._id,
         name: this.name,
-        phone_number: this.phone_number
+        phone_number: this.phone_number,
+        deviceId: this.deviceId
     };
 };
 
