@@ -37,8 +37,13 @@ const requestLoginOtp = async (req, res, next) => {
 
         if (!user) {
             user = new User({ name, phone_number: phoneNumber });
-        } else if (name && user.name !== name) {
-            user.name = name;
+        } else {
+            if (user.isBlocked) {
+                return response.unauthorized(res, 'Your account has been blocked. Please contact support.');
+            }
+            if (name && user.name !== name) {
+                user.name = name;
+            }
         }
 
         // Generate and save OTP to Redis (encrypted with deviceId)
@@ -94,6 +99,10 @@ const verifyLoginOtp = async (req, res, next) => {
 
         if (!user) {
             return response.badRequest(res, 'User not found. Please request OTP first.');
+        }
+
+        if (user.isBlocked) {
+            return response.unauthorized(res, 'Your account has been blocked. Please contact support.');
         }
 
         // Verify OTP from Redis (decrypted using deviceId)

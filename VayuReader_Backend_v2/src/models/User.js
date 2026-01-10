@@ -54,6 +54,14 @@ const userSchema = new mongoose.Schema(
          */
         lastLogin: {
             type: Date
+        },
+
+        /**
+         * Whether the user is blocked from logging in.
+         */
+        isBlocked: {
+            type: Boolean,
+            default: false
         }
     },
     {
