@@ -198,6 +198,9 @@ const uploadPdf = async (req, res, next) => {
             createdAt: newDoc.createdAt
         });
 
+        // Invalidate categories cache
+        await redisClient.del('pdf:categories');
+
         response.created(res, newDoc, 'PDF uploaded successfully');
     } catch (error) {
         next(error);
@@ -249,6 +252,9 @@ const updatePdf = async (req, res, next) => {
             category: updated.category,
             updatedAt: updated.updatedAt
         });
+
+        // Invalidate categories cache
+        await redisClient.del('pdf:categories');
 
         response.success(res, updated, 'PDF updated successfully');
     } catch (error) {
@@ -316,6 +322,9 @@ const deletePdf = async (req, res, next) => {
             id: req.params.id,
             title: pdf.title
         });
+
+        // Invalidate categories cache
+        await redisClient.del('pdf:categories');
 
         response.success(res, null, 'PDF deleted successfully');
     } catch (error) {
