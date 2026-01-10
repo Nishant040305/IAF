@@ -1,6 +1,7 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import api from '../utils/api';
+import { useDebounce } from '../utils/useDebounce';
 import {
   validateFile,
   validateDictionaryData,
@@ -59,6 +60,9 @@ export default function DictionaryUploader() {
   const csvInputRef = useRef();
   const jsonInputRef = useRef();
 
+  // Debounced search term for auto-search
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
   const showMessage = (msg, type = 'info') => {
     setMessage(msg);
     setMessageType(type);
@@ -87,9 +91,38 @@ export default function DictionaryUploader() {
     }
   };
 
+  // Search words via API
+  const searchWords = useCallback(async (term) => {
+    if (!term.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await api.get(`/api/dictionary/search/${encodeURIComponent(term)}`);
+      const data = res.data.data;
+      setSearchResults(Array.isArray(data) ? data : (data.words || []));
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Initial load
   useEffect(() => {
     fetchWords(1);
   }, []);
+
+  // Auto-search when debounced term changes
+  useEffect(() => {
+    if (debouncedSearchTerm.trim()) {
+      searchWords(debouncedSearchTerm);
+      setCurrentPage(1);
+    } else {
+      setSearchResults([]);
+    }
+  }, [debouncedSearchTerm, searchWords]);
 
   const handleAddSingle = async () => {
     const word = sanitizeString(newWord.trim().toUpperCase());
@@ -437,8 +470,13 @@ export default function DictionaryUploader() {
       <div style={styles.card}>
         <h3 style={styles.cardTitle}>Search Dictionary</h3>
         <div style={styles.row}>
-          <input placeholder="Enter word..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ ...styles.input, flex: 1 }} />
-          <button style={styles.primaryBtn} onClick={handleSearch}>Search</button>
+          <input
+            placeholder="Start typing to search..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            style={{ ...styles.input, flex: 1 }}
+          />
+          {loading && searchTerm.trim() && <span style={styles.loadingText}>Searching...</span>}
         </div>
 
         <table style={styles.table}>
@@ -554,4 +592,5 @@ const styles = {
   cancelBtn: { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #fecaca', color: '#dc2626', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
   pagination: { display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 16 },
   pageBtn: { background: '#e2e8f0', border: 'none', padding: '8px 16px', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
+  loadingText: { color: '#64748b', fontSize: '0.85rem', fontStyle: 'italic' },
 };

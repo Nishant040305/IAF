@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../utils/api';
+import { useDebounce } from '../utils/useDebounce';
 import {
   validateFile,
   validateAbbreviationData,
@@ -46,14 +47,13 @@ export default function AbbreviationUploader() {
   const csvInputRef = useRef();
   const jsonInputRef = useRef();
 
+  // Debounced search term for auto-search
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
   const showMessage = (msg, type = 'info') => {
     setMessage(msg);
     setMessageType(type);
   };
-
-  useEffect(() => {
-    fetchAbbreviations();
-  }, []);
 
   const fetchAbbreviations = async () => {
     try {
@@ -74,6 +74,38 @@ export default function AbbreviationUploader() {
       setLoading(false);
     }
   };
+
+  // Search abbreviations via API
+  const searchAbbreviationsAPI = useCallback(async (term) => {
+    if (!term.trim()) {
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await api.get(`/api/abbreviations?search=${encodeURIComponent(term)}`);
+      const data = res.data.data;
+      setAbbreviations(Array.isArray(data) ? data : (data.abbreviations || []));
+    } catch {
+      setAbbreviations([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    fetchAbbreviations();
+  }, []);
+
+  // Auto-search when debounced term changes
+  useEffect(() => {
+    if (debouncedSearchTerm.trim()) {
+      searchAbbreviationsAPI(debouncedSearchTerm);
+      setCurrentPage(1);
+    } else {
+      fetchAbbreviations();
+    }
+  }, [debouncedSearchTerm, searchAbbreviationsAPI]);
 
   const handleSubmit = async () => {
     const cleanAbbr = sanitizeString(abbreviation.trim());
@@ -275,12 +307,9 @@ export default function AbbreviationUploader() {
     }
   };
 
-  const filteredAbbreviations = abbreviations.filter(a =>
-    a.abbreviation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.fullForm?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const totalPages = Math.ceil(filteredAbbreviations.length / PAGE_SIZE) || 1;
-  const paginatedAbbreviations = filteredAbbreviations.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // Pagination (API already handles filtering)
+  const totalPages = Math.ceil(abbreviations.length / PAGE_SIZE) || 1;
+  const paginatedAbbreviations = abbreviations.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div style={styles.container}>
@@ -376,13 +405,16 @@ export default function AbbreviationUploader() {
       {/* Database */}
       <div style={styles.card}>
         <div style={styles.tableHeader}>
-          <h3 style={styles.cardTitle}>Database ({filteredAbbreviations.length})</h3>
-          <input
-            placeholder="Search..."
-            value={searchTerm}
-            onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-            style={styles.searchInput}
-          />
+          <h3 style={styles.cardTitle}>Database ({abbreviations.length})</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              placeholder="Start typing to search..."
+              value={searchTerm}
+              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              style={styles.searchInput}
+            />
+            {loading && searchTerm.trim() && <span style={styles.loadingText}>Searching...</span>}
+          </div>
         </div>
         <table style={styles.table}>
           <thead>

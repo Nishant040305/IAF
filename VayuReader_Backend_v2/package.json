@@ -11,7 +11,8 @@
         "lint:fix": "eslint src/ --fix",
         "db:optimize": "node scripts/optimizeDb.js",
         "db:seed": "node scripts/seedAdmin.js",
-        "sms-simulator": "node scripts/sms-simulator.js"
+        "sms-simulator": "node scripts/sms-simulator.js",
+        "es:sync": "node scripts/syncElasticsearch.js"
     },
     "keywords": [
         "vayureader",
@@ -38,7 +39,8 @@
         "multer": "^1.4.5-lts.1",
         "rate-limit-redis": "^4.3.1",
         "redis": "^5.10.0",
-        "uuid": "^9.0.1"
+        "uuid": "^9.0.1",
+        "@elastic/elasticsearch": "^8.11.0"
     },
     "devDependencies": {
         "@eslint/js": "^9.39.2",
