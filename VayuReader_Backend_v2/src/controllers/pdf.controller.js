@@ -11,6 +11,7 @@ const fs = require('fs').promises;
 const PdfDocument = require('../models/PdfDocument');
 const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services/audit.service');
 const { publishPdfEvent, PDF_EVENTS } = require('../services/pubsub.service');
+const { logPdfRead } = require('../services/userAudit.service');
 const response = require('../utils/response');
 const { escapeRegex } = require('../utils/sanitize');
 
@@ -144,6 +145,15 @@ const getPdfById = async (req, res, next) => {
 
         if (!pdf) {
             return response.notFound(res, 'PDF not found');
+        }
+
+        // Log PDF read event for authenticated users
+        if (req.user && req.user.userId) {
+            logPdfRead(
+                { userId: req.user.userId, phone_number: req.user.phone_number || 'unknown' },
+                req.body.deviceId || req.headers['x-device-id'] || 'unknown',
+                { pdfId: pdf._id.toString(), title: pdf.title }
+            );
         }
 
         response.success(res, pdf);

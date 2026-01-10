@@ -33,9 +33,28 @@ const userSchema = new mongoose.Schema(
         },
 
         /**
-         * Temporary OTP code for authentication.
-         * Cleared after successful verification.
+         * Current device ID bound to this user.
          */
+        deviceId: {
+            type: String,
+            trim: true,
+            index: true
+        },
+
+        /**
+         * Previous device ID (stored when device changes for audit trail).
+         */
+        previousDeviceId: {
+            type: String,
+            trim: true
+        },
+
+        /**
+         * Last login timestamp.
+         */
+        lastLogin: {
+            type: Date
+        }
     },
     {
         timestamps: true

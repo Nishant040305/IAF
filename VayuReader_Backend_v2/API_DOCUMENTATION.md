@@ -6,9 +6,10 @@ http://localhost:3000/api
 ```
 
 ## Authentication
-- **User Auth**: Bearer token in `Authorization` header
+- **User Auth**: Bearer token in `Authorization` header (lifetime token)
 - **Admin Auth**: HTTP-only cookie (`admin_token`) or Bearer token
 - **2FA**: Password + OTP for admin login
+- **Device Binding**: Users are bound to their device via `deviceId`
 
 ---
 
@@ -17,12 +18,13 @@ http://localhost:3000/api
 ## Request OTP
 `POST /api/auth/login/request-otp`
 
-Request OTP for user login. Creates user if doesn't exist.
+Request OTP for user login. Creates user if doesn't exist. **OTP is encrypted using deviceId.**
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+|-------|------|----------|--------------|
 | phone_number | string | ✅ | 10-digit phone number |
 | name | string | ✅ | User's name |
+| deviceId | string | ✅ | Unique device identifier |
 
 **Response:**
 ```json
@@ -38,23 +40,29 @@ Request OTP for user login. Creates user if doesn't exist.
 ## Verify OTP
 `POST /api/auth/login/verify-otp`
 
-Verify OTP and complete user login.
+Verify OTP and complete user login. Issues a **lifetime token**. Detects device changes.
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+|-------|------|----------|--------------|
 | phone_number | string | ✅ | 10-digit phone number |
 | otp | string | ✅ | 6-digit OTP |
+| deviceId | string | ✅ | Same deviceId used in request-otp |
 
 **Response:**
 ```json
 {
   "success": true,
   "data": {
-    "user": { "id": "...", "name": "...", "phone_number": "..." }
-  }
+    "user": { "id": "...", "name": "...", "phone_number": "..." },
+    "token": "eyJhbGc...",
+    "isNewDevice": false,
+    "deviceChanged": false
+  },
+  "message": "Login successful"
 }
 ```
-> Cookie `auth_token` is set automatically
+> Cookie `auth_token` is set automatically (lifetime expiry)
+> **Note:** If `deviceChanged: true`, the user logged in from a different device than previously registered.
 
 ---
 
@@ -502,6 +510,35 @@ es.addEventListener('PDF_ADDED', (e) => console.log(JSON.parse(e.data)));
 `GET /api/audit/stats`
 
 **Requires:** Admin with `view_audit` permission
+
+---
+
+# 👤 User Auditing
+
+User activities are tracked separately from admin audit logs.
+
+## User Audit Events
+
+| Action | Trigger | Metadata |
+|--------|---------|----------|
+| `LOGIN` | User logs in | `{ name }` |
+| `DEVICE_CHANGE` | User logs in from different device | `{ previousDeviceId, newDeviceId }` |
+| `READ_PDF` | User views a PDF | `{ pdfId, title }` |
+
+## User Audit Schema
+
+```json
+{
+  "userId": "ObjectId",
+  "phone_number": "9876543210",
+  "action": "LOGIN | DEVICE_CHANGE | READ_PDF",
+  "deviceId": "device-uuid-here",
+  "metadata": { ... },
+  "timestamp": "2026-01-10T21:00:00.000Z"
+}
+```
+
+> User audits are stored in the `useraudits` MongoDB collection.
 
 ---
 

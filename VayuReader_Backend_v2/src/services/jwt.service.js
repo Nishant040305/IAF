@@ -29,6 +29,28 @@ const generateUserToken = (userId, additionalPayload = {}) => {
 };
 
 /**
+ * Generates a lifetime JWT token for a user (100 years).
+ * Used for device-bound authentication.
+ * 
+ * @param {string} userId - MongoDB ObjectId of the user
+ * @param {Object} [additionalPayload={}] - Additional data to include in token
+ * @returns {string} JWT token
+ */
+const generateLifetimeUserToken = (userId, additionalPayload = {}) => {
+    const payload = {
+        userId,
+        type: 'user',
+        lifetime: true,
+        ...additionalPayload
+    };
+
+    // 100 years = 36500 days
+    return jwt.sign(payload, jwtConfig.secret, {
+        expiresIn: '36500d'
+    });
+};
+
+/**
  * Generates a JWT token for an admin.
  * 
  * @param {Object} admin - Admin document
@@ -73,6 +95,7 @@ const decodeToken = (token) => {
 
 module.exports = {
     generateUserToken,
+    generateLifetimeUserToken,
     generateAdminToken,
     verifyToken,
     decodeToken

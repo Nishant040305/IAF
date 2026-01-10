@@ -7,20 +7,30 @@
  */
 
 const User = require('../models/User');
-const { generateUserToken } = require('../services/jwt.service');
+const { generateLifetimeUserToken } = require('../services/jwt.service');
 const { generateOtp, saveOtp, verifyOtp, deleteOtp, shouldSkipSend } = require('../services/otp.service');
 const { sendOtpSms } = require('../services/sms.service');
+const { logLogin, logDeviceChange } = require('../services/userAudit.service');
 const response = require('../utils/response');
 const { sanitizePhone, sanitizeName } = require('../utils/sanitize');
 
 /**
  * Request OTP for user login.
  * Creates user if doesn't exist.
+ * Requires deviceId for device-bound OTP encryption.
  */
 const requestLoginOtp = async (req, res, next) => {
     try {
         const phoneNumber = sanitizePhone(req.body.phone_number);
         const name = sanitizeName(req.body.name);
+        const { deviceId } = req.body;
+
+        // Validate deviceId is provided
+        if (!deviceId || typeof deviceId !== 'string' || deviceId.trim() === '') {
+            return response.badRequest(res, 'Device ID is required');
+        }
+
+        const sanitizedDeviceId = deviceId.trim();
 
         // Find or create user
         let user = await User.findOne({ phone_number: phoneNumber });
@@ -31,9 +41,9 @@ const requestLoginOtp = async (req, res, next) => {
             user.name = name;
         }
 
-        // Generate and save OTP to Redis
+        // Generate and save OTP to Redis (encrypted with deviceId)
         const otp = generateOtp();
-        await saveOtp(phoneNumber, otp);
+        await saveOtp(phoneNumber, otp, sanitizedDeviceId);
 
         // Save user (for name updates/creation)
         await user.save();
@@ -65,11 +75,19 @@ const requestLoginOtp = async (req, res, next) => {
 
 /**
  * Verify OTP and complete login.
+ * Handles device binding and change detection.
  */
 const verifyLoginOtp = async (req, res, next) => {
     try {
         const phoneNumber = sanitizePhone(req.body.phone_number);
-        const { otp } = req.body;
+        const { otp, deviceId } = req.body;
+
+        // Validate deviceId is provided
+        if (!deviceId || typeof deviceId !== 'string' || deviceId.trim() === '') {
+            return response.badRequest(res, 'Device ID is required');
+        }
+
+        const sanitizedDeviceId = deviceId.trim();
 
         // Find user
         const user = await User.findOne({ phone_number: phoneNumber });
@@ -78,8 +96,8 @@ const verifyLoginOtp = async (req, res, next) => {
             return response.badRequest(res, 'User not found. Please request OTP first.');
         }
 
-        // Verify OTP from Redis
-        const verification = await verifyOtp(otp, phoneNumber);
+        // Verify OTP from Redis (decrypted using deviceId)
+        const verification = await verifyOtp(otp, phoneNumber, sanitizedDeviceId);
 
         if (!verification.valid) {
             return response.badRequest(res, verification.error);
@@ -88,23 +106,47 @@ const verifyLoginOtp = async (req, res, next) => {
         // Clear OTP from Redis
         await deleteOtp(phoneNumber);
 
-        // Generate JWT token
-        const token = generateUserToken(user._id);
+        // Handle device binding and change detection
+        const isNewUser = !user.deviceId;
+        const isDeviceChange = user.deviceId && user.deviceId !== sanitizedDeviceId;
 
-        // Set HTTP-only cookie
+        if (isDeviceChange) {
+            // Log device change with both old and new device IDs
+            logDeviceChange(user, user.deviceId, sanitizedDeviceId);
+
+            // Store the previous device ID for audit trail
+            user.previousDeviceId = user.deviceId;
+        }
+
+        // Update user's device ID and last login
+        user.deviceId = sanitizedDeviceId;
+        user.lastLogin = new Date();
+        await user.save();
+
+        // Log login event
+        logLogin(user, sanitizedDeviceId);
+
+        // Generate lifetime JWT token
+        const token = generateLifetimeUserToken(user._id, { deviceId: sanitizedDeviceId });
+
+        // Set HTTP-only cookie with long expiration
         const isTesting = process.env.TESTING === 'true';
+        const oneHundredYearsMs = 100 * 365 * 24 * 60 * 60 * 1000;
+
         res.cookie('auth_token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: isTesting ? 'none' : 'lax',
-            maxAge: 24 * 60 * 60 * 1000, // 24 hours
+            maxAge: oneHundredYearsMs,
             path: '/'
         });
 
         response.success(res, {
             user: user.toSafeObject(),
-            token
-        }, 'Login successful');
+            token,
+            isNewDevice: isNewUser,
+            deviceChanged: isDeviceChange
+        }, isDeviceChange ? 'Login successful (device changed)' : 'Login successful');
     } catch (error) {
         next(error);
     }
@@ -116,6 +158,7 @@ const verifyLoginOtp = async (req, res, next) => {
  */
 const logout = async (req, res, next) => {
     try {
+        const isTesting = process.env.TESTING === 'true';
         res.cookie('auth_token', '', {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
