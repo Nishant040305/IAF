@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../utils/api';
-import { useDebounce } from '../utils/useDebounce';
+import { useDebouncedCallback } from '../utils/useDebounce';
 import {
   validateFile,
   validateAbbreviationData,
@@ -30,14 +30,16 @@ export default function AbbreviationUploader() {
   const [fullForm, setFullForm] = useState('');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info');
-  const [searchTerm, setSearchTerm] = useState('');
   const [abbreviations, setAbbreviations] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editAbbreviation, setEditAbbreviation] = useState('');
   const [editFullForm, setEditFullForm] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // For actions (Add, Delete, Upload)
+  const [isFetching, setIsFetching] = useState(false); // For table data fetching
   const [addLoading, setAddLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const searchInputRef = useRef(null); // Uncontrolled input ref
+  const [activeSearch, setActiveSearch] = useState(''); // Track active search term
 
   // Staged upload state
   const [stagedData, setStagedData] = useState(null);
@@ -47,17 +49,14 @@ export default function AbbreviationUploader() {
   const csvInputRef = useRef();
   const jsonInputRef = useRef();
 
-  // Debounced search term for auto-search
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
-
   const showMessage = (msg, type = 'info') => {
     setMessage(msg);
     setMessageType(type);
   };
 
-  const fetchAbbreviations = async () => {
+  const fetchAbbreviations = useCallback(async () => {
     try {
-      setLoading(true);
+      setIsFetching(true);
       const response = await api.get('/api/abbreviations/all?limit=500', { timeout: 10000 });
       const data = response.data.data;
       // Handle paginated response
@@ -71,41 +70,40 @@ export default function AbbreviationUploader() {
     } catch (error) {
       showMessage('Failed to load abbreviations.', 'error');
     } finally {
-      setLoading(false);
+      setIsFetching(false);
     }
-  };
+  }, []);
 
   // Search abbreviations via API
   const searchAbbreviationsAPI = useCallback(async (term) => {
-    if (!term.trim()) {
-      return;
-    }
     try {
-      setLoading(true);
+      setIsFetching(true);
       const res = await api.get(`/api/abbreviations?search=${encodeURIComponent(term)}`);
       const data = res.data.data;
       setAbbreviations(Array.isArray(data) ? data : (data.abbreviations || []));
     } catch {
       setAbbreviations([]);
     } finally {
-      setLoading(false);
+      setIsFetching(false);
     }
   }, []);
+
+  // Debounced handler for input changes
+  const handleSearchChange = useDebouncedCallback((value) => {
+    setActiveSearch(value);
+    setCurrentPage(1); // Reset to page 1 on search
+
+    if (value.trim()) {
+      searchAbbreviationsAPI(value);
+    } else {
+      fetchAbbreviations(); // Reload all if clear
+    }
+  }, 300);
 
   // Initial load
   useEffect(() => {
     fetchAbbreviations();
-  }, []);
-
-  // Auto-search when debounced term changes
-  useEffect(() => {
-    if (debouncedSearchTerm.trim()) {
-      searchAbbreviationsAPI(debouncedSearchTerm);
-      setCurrentPage(1);
-    } else {
-      fetchAbbreviations();
-    }
-  }, [debouncedSearchTerm, searchAbbreviationsAPI]);
+  }, [fetchAbbreviations]);
 
   const handleSubmit = async () => {
     const cleanAbbr = sanitizeString(abbreviation.trim());
@@ -406,14 +404,13 @@ export default function AbbreviationUploader() {
       <div style={styles.card}>
         <div style={styles.tableHeader}>
           <h3 style={styles.cardTitle}>Database ({abbreviations.length})</h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
             <input
               placeholder="Start typing to search..."
-              value={searchTerm}
-              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              style={styles.searchInput}
+              ref={searchInputRef}
+              onChange={e => handleSearchChange(e.target.value)}
+              style={{ ...styles.searchInput, width: '100%' }}
             />
-            {loading && searchTerm.trim() && <span style={styles.loadingText}>Searching...</span>}
           </div>
         </div>
         <table style={styles.table}>
@@ -425,7 +422,7 @@ export default function AbbreviationUploader() {
             </tr>
           </thead>
           <tbody>
-            {loading && abbreviations.length === 0 ? (
+            {isFetching && abbreviations.length === 0 ? (
               <tr><td colSpan={3} style={styles.emptyCell}>Loading...</td></tr>
             ) : paginatedAbbreviations.length === 0 ? (
               <tr><td colSpan={3} style={styles.emptyCell}>No abbreviations found</td></tr>
@@ -508,4 +505,14 @@ const styles = {
   cancelBtn: { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #fecaca', color: '#dc2626', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
   pagination: { display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 16 },
   pageBtn: { background: '#e2e8f0', border: 'none', padding: '8px 16px', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
+  loadingText: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: '#64748b',
+    fontSize: '0.85rem',
+    fontStyle: 'italic',
+    pointerEvents: 'none'
+  },
 };

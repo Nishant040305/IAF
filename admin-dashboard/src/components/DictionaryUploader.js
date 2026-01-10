@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import api from '../utils/api';
-import { useDebounce } from '../utils/useDebounce';
+import { useDebouncedCallback } from '../utils/useDebounce';
 import {
   validateFile,
   validateDictionaryData,
@@ -28,7 +28,8 @@ const CancelIcon = () => (
 export default function DictionaryUploader() {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // For actions
+  const [isFetching, setIsFetching] = useState(false); // For data fetching
 
   // Single entry form
   const [newWord, setNewWord] = useState('');
@@ -44,9 +45,10 @@ export default function DictionaryUploader() {
 
   // Search & Display with server-side pagination
   const [allWords, setAllWords] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [activeSearch, setActiveSearch] = useState(''); // State for the committed search term
   const [searchResults, setSearchResults] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const searchInputRef = useRef(null); // Ref for input element
   const [totalPages, setTotalPages] = useState(1);
   const [totalWords, setTotalWords] = useState(0);
 
@@ -60,8 +62,16 @@ export default function DictionaryUploader() {
   const csvInputRef = useRef();
   const jsonInputRef = useRef();
 
-  // Debounced search term for auto-search
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  // Debounced handler for input changes
+  const handleSearchChange = useDebouncedCallback((value) => {
+    setActiveSearch(value);
+    setCurrentPage(1);
+    if (value.trim()) {
+      searchWords(value);
+    } else {
+      setSearchResults([]);
+    }
+  }, 300);
 
   const showMessage = (msg, type = 'info') => {
     setMessage(msg);
@@ -69,9 +79,9 @@ export default function DictionaryUploader() {
   };
 
   // Fetch words with pagination
-  const fetchWords = async (page = 1) => {
+  const fetchWords = useCallback(async (page = 1) => {
     try {
-      setLoading(true);
+      setIsFetching(true);
       const res = await api.get(`/api/dictionary/words/all?page=${page}&limit=${PAGE_SIZE}`);
       const data = res.data.data;
       // Handle paginated response
@@ -87,9 +97,9 @@ export default function DictionaryUploader() {
     } catch (error) {
       showMessage('Failed to load words', 'error');
     } finally {
-      setLoading(false);
+      setIsFetching(false);
     }
-  };
+  }, []);
 
   // Search words via API
   const searchWords = useCallback(async (term) => {
@@ -98,31 +108,23 @@ export default function DictionaryUploader() {
       return;
     }
     try {
-      setLoading(true);
+      setIsFetching(true);
       const res = await api.get(`/api/dictionary/search/${encodeURIComponent(term)}`);
       const data = res.data.data;
       setSearchResults(Array.isArray(data) ? data : (data.words || []));
     } catch {
       setSearchResults([]);
     } finally {
-      setLoading(false);
+      setIsFetching(false);
     }
   }, []);
 
   // Initial load
   useEffect(() => {
     fetchWords(1);
-  }, []);
+  }, [fetchWords]);
 
-  // Auto-search when debounced term changes
-  useEffect(() => {
-    if (debouncedSearchTerm.trim()) {
-      searchWords(debouncedSearchTerm);
-      setCurrentPage(1);
-    } else {
-      setSearchResults([]);
-    }
-  }, [debouncedSearchTerm, searchWords]);
+  // Remove the useEffect for debouncedSearchTerm since we use callback now
 
   const handleAddSingle = async () => {
     const word = sanitizeString(newWord.trim().toUpperCase());
@@ -307,14 +309,9 @@ export default function DictionaryUploader() {
   };
 
   const handleSearch = () => {
-    if (!searchTerm.trim()) return;
-    api.get(`/api/dictionary/search/${searchTerm}`)
-      .then(res => {
-        const data = res.data.data;
-        setSearchResults(Array.isArray(data) ? data : (data.words || []));
-      })
-      .catch(() => setSearchResults([]));
-    setCurrentPage(1);
+    // Manual search via button is removed, but we keep this empty or remove it. 
+    // The component code used it earlier but we replaced the button UI.
+    // However if there are references left, we can leave this no-op or remove.
   };
 
   const handleEdit = (wordData) => {
@@ -372,10 +369,10 @@ export default function DictionaryUploader() {
   };
 
   // Use searchResults if searching, otherwise show all words
-  const displayWords = searchTerm.trim() ? searchResults : allWords;
+  const displayWords = activeSearch.trim() ? searchResults : allWords;
   // For search, use client-side pagination; for all words, server already paginated
-  const displayTotalPages = searchTerm.trim() ? Math.ceil(searchResults.length / PAGE_SIZE) || 1 : totalPages;
-  const paginatedResults = searchTerm.trim()
+  const displayTotalPages = activeSearch.trim() ? Math.ceil(searchResults.length / PAGE_SIZE) || 1 : totalPages;
+  const paginatedResults = activeSearch.trim()
     ? displayWords.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
     : displayWords; // Server already paginated
 
@@ -469,14 +466,13 @@ export default function DictionaryUploader() {
       {/* Search */}
       <div style={styles.card}>
         <h3 style={styles.cardTitle}>Search Dictionary</h3>
-        <div style={styles.row}>
+        <div style={{ ...styles.row, position: 'relative' }}>
           <input
             placeholder="Start typing to search..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
+            ref={searchInputRef}
+            onChange={e => handleSearchChange(e.target.value)}
             style={{ ...styles.input, flex: 1 }}
           />
-          {loading && searchTerm.trim() && <span style={styles.loadingText}>Searching...</span>}
         </div>
 
         <table style={styles.table}>
@@ -491,7 +487,7 @@ export default function DictionaryUploader() {
           </thead>
           <tbody>
             {paginatedResults.length === 0 ? (
-              <tr><td colSpan={5} style={styles.emptyCell}>No results found. Try searching.</td></tr>
+              <tr><td colSpan={5} style={styles.emptyCell}>{isFetching ? 'Searching...' : 'No results found. Try searching.'}</td></tr>
             ) : paginatedResults.map((wordData, idx) => (
               <tr key={wordData._id} style={idx % 2 === 0 ? styles.zebra : {}}>
                 <td style={styles.td}>
@@ -531,7 +527,7 @@ export default function DictionaryUploader() {
             onClick={() => {
               const newPage = Math.max(1, currentPage - 1);
               setCurrentPage(newPage);
-              if (!searchTerm.trim()) fetchWords(newPage);
+              if (!activeSearch.trim()) fetchWords(newPage);
             }}
             disabled={currentPage === 1}
           >
@@ -543,7 +539,7 @@ export default function DictionaryUploader() {
             onClick={() => {
               const newPage = Math.min(displayTotalPages, currentPage + 1);
               setCurrentPage(newPage);
-              if (!searchTerm.trim()) fetchWords(newPage);
+              if (!activeSearch.trim()) fetchWords(newPage);
             }}
             disabled={currentPage === displayTotalPages}
           >
@@ -592,5 +588,14 @@ const styles = {
   cancelBtn: { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #fecaca', color: '#dc2626', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
   pagination: { display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 16 },
   pageBtn: { background: '#e2e8f0', border: 'none', padding: '8px 16px', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
-  loadingText: { color: '#64748b', fontSize: '0.85rem', fontStyle: 'italic' },
+  loadingText: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: '#64748b',
+    fontSize: '0.85rem',
+    fontStyle: 'italic',
+    pointerEvents: 'none'
+  },
 };
