@@ -115,10 +115,11 @@ const verifyLoginOtp = async (req, res, next) => {
 
         // Set JWT as HTTP-only cookie
         const isProduction = process.env.NODE_ENV === 'production';
+        const isTesting = process.env.TESTING === 'true';
         res.cookie('admin_token', token, {
             httpOnly: true,           // Prevents JavaScript access
             secure: isProduction,     // HTTPS only in production
-            sameSite: 'lax',       // CSRF protection
+            sameSite: isTesting ? 'none' : 'lax',       // CSRF protection
             maxAge: 24 * 60 * 60 * 1000, // 24 hours
             path: '/'
         });
@@ -253,7 +254,7 @@ const logout = (req, res) => {
     res.clearCookie('admin_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        sameSite: isTesting ? 'none' : 'lax',
         path: '/'
     });
     response.success(res, null, 'Logged out successfully');

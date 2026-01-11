@@ -7,3 +7,5 @@ uploads/
 # SSL Certificates
 nginx/certs/*.key
 nginx/certs/*.crt
+*.crt
+*.key

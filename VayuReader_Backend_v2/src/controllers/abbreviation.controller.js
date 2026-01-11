@@ -13,6 +13,7 @@ const { escapeRegex, createExactMatchRegex } = require('../utils/sanitize');
 
 const { redisClient } = require('../config/redis');
 const { invalidateAbbreviation, invalidateAllAbbreviationCaches } = require('../services/cache.service');
+const { searchAbbreviations: esSearchAbbreviations, indexAbbreviation, deleteAbbreviation: deleteAbbrFromES } = require('../services/search.service');
 
 // Cache TTL constants (in seconds)
 const CACHE_TTL = {
@@ -22,7 +23,7 @@ const CACHE_TTL = {
 };
 
 /**
- * Search abbreviations.
+ * Search abbreviations using Elasticsearch with MongoDB fallback.
  * Cached for 30 minutes.
  */
 const searchAbbreviations = async (req, res, next) => {
@@ -40,20 +41,30 @@ const searchAbbreviations = async (req, res, next) => {
             return response.success(res, JSON.parse(cachedData));
         }
 
-        let query = {};
+        let abbreviations;
+
+        // Only use ES for search queries, not "get all"
         if (search) {
-            const safeSearch = escapeRegex(search);
-            query = {
-                $or: [
-                    { abbreviation: { $regex: safeSearch, $options: 'i' } },
-                    { fullForm: { $regex: safeSearch, $options: 'i' } }
-                ]
-            };
+            abbreviations = await esSearchAbbreviations(search, 100);
         }
 
-        const abbreviations = await Abbreviation.find(query)
-            .sort({ abbreviation: 1 })
-            .lean();
+        // Fallback to MongoDB if ES unavailable or no search term
+        if (abbreviations === null || !search) {
+            let query = {};
+            if (search) {
+                const safeSearch = escapeRegex(search);
+                query = {
+                    $or: [
+                        { abbreviation: { $regex: safeSearch, $options: 'i' } },
+                        { fullForm: { $regex: safeSearch, $options: 'i' } }
+                    ]
+                };
+            }
+
+            abbreviations = await Abbreviation.find(query)
+                .sort({ abbreviation: 1 })
+                .lean();
+        }
 
         // Cache results
         await redisClient.set(cacheKey, JSON.stringify(abbreviations), {
@@ -166,8 +177,9 @@ const createAbbreviation = async (req, res, next) => {
             fullForm: newAbbr.fullForm
         });
 
-        // Invalidate relevant caches
+        // Invalidate relevant caches and sync to ES
         await invalidateAbbreviation(newAbbr.abbreviation);
+        indexAbbreviation(newAbbr).catch(err => console.error('[ES] Index abbreviation failed:', err.message));
 
         response.created(res, newAbbr, 'Abbreviation created successfully');
     } catch (error) {
@@ -207,6 +219,9 @@ const updateAbbreviation = async (req, res, next) => {
             await invalidateAbbreviation(updated.abbreviation);
         }
 
+        // Sync to Elasticsearch
+        indexAbbreviation(updated).catch(err => console.error('[ES] Index abbreviation failed:', err.message));
+
         response.success(res, updated, 'Abbreviation updated successfully');
     } catch (error) {
         next(error);
@@ -230,8 +245,9 @@ const deleteAbbreviation = async (req, res, next) => {
             abbreviation: abbr.abbreviation
         });
 
-        // Invalidate cache
+        // Invalidate cache and remove from ES
         await invalidateAbbreviation(abbr.abbreviation);
+        deleteAbbrFromES(req.params.id).catch(err => console.error('[ES] Delete abbreviation failed:', err.message));
 
         response.success(res, null, 'Abbreviation deleted successfully');
     } catch (error) {

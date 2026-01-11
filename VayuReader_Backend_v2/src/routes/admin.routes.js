@@ -58,44 +58,4 @@ router.get('/me', authenticateAdmin, adminController.getCurrentAdmin);
  */
 router.post('/logout', adminController.logout);
 
-// =============================================================================
-// SUB-ADMIN MANAGEMENT ROUTES (Super Admin Only)
-// =============================================================================
-
-/**
- * GET /api/admin/sub-admins
- * Get all sub-admins.
- */
-router.get(
-    '/sub-admins',
-    authenticateAdmin,
-    requireSuperAdmin,
-    adminController.getAllSubAdmins
-);
-
-/**
- * POST /api/admin/sub-admins
- * Create a new sub-admin.
- */
-router.post(
-    '/sub-admins',
-    authenticateAdmin,
-    requireSuperAdmin,
-    trimFields,
-    requireFields(['name', 'contact']),
-    adminController.createSubAdmin
-);
-
-/**
- * DELETE /api/admin/sub-admins/:id
- * Delete a sub-admin.
- */
-router.delete(
-    '/sub-admins/:id',
-    authenticateAdmin,
-    requireSuperAdmin,
-    validateObjectId,
-    adminController.deleteSubAdmin
-);
-
 module.exports = router;

@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../utils/api';
+import { useDebouncedCallback } from '../utils/useDebounce';
 import {
   validateFile,
   validateAbbreviationData,
@@ -31,17 +32,19 @@ export default function AbbreviationUploader() {
   const [fullForm, setFullForm] = useState('');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info');
-  const [searchTerm, setSearchTerm] = useState('');
   const [abbreviations, setAbbreviations] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editAbbreviation, setEditAbbreviation] = useState('');
   const [editFullForm, setEditFullForm] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // For actions (Add, Delete, Upload)
+  const [isFetching, setIsFetching] = useState(false); // For table data fetching
   const [addLoading, setAddLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalAbbreviations, setTotalAbbreviations] = useState(0);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const searchInputRef = useRef(null); // Uncontrolled input ref
+  const [activeSearch, setActiveSearch] = useState(''); // Track active search term
 
   // Staged upload state
   const [stagedData, setStagedData] = useState(null);
@@ -56,14 +59,10 @@ export default function AbbreviationUploader() {
     setMessageType(type);
   };
 
-  useEffect(() => {
-    fetchAbbreviations(1, pageSize);
-  }, [pageSize]);
-
   // Server-side pagination - fetch only the current page
-  const fetchAbbreviations = async (page = 1, limit = pageSize) => {
+  const fetchAbbreviations = useCallback(async (page = 1, limit = DEFAULT_PAGE_SIZE) => {
     try {
-      setLoading(true);
+      setIsFetching(true);
       const response = await api.get(`/api/abbreviations/all?page=${page}&limit=${limit}`, { timeout: 10000 });
       const data = response.data.data;
       // Handle paginated response
@@ -80,9 +79,42 @@ export default function AbbreviationUploader() {
     } catch (error) {
       showMessage('Failed to load abbreviations.', 'error');
     } finally {
-      setLoading(false);
+      setIsFetching(false);
     }
-  };
+  }, []);
+
+  // Search abbreviations via API
+  const searchAbbreviationsAPI = useCallback(async (term) => {
+    try {
+      setIsFetching(true);
+      const res = await api.get(`/api/abbreviations?search=${encodeURIComponent(term)}`);
+      const data = res.data.data;
+      setAbbreviations(Array.isArray(data) ? data : (data.abbreviations || []));
+      setTotalAbbreviations(Array.isArray(data) ? data.length : (data.abbreviations?.length || 0));
+      setTotalPages(1); // Search results are not paginated
+    } catch {
+      setAbbreviations([]);
+    } finally {
+      setIsFetching(false);
+    }
+  }, []);
+
+  // Debounced handler for input changes
+  const handleSearchChange = useDebouncedCallback((value) => {
+    setActiveSearch(value);
+    setCurrentPage(1); // Reset to page 1 on search
+
+    if (value.trim()) {
+      searchAbbreviationsAPI(value);
+    } else {
+      fetchAbbreviations(1, pageSize); // Reload all if clear
+    }
+  }, 300);
+
+  // Initial load and page size change
+  useEffect(() => {
+    fetchAbbreviations(1, pageSize);
+  }, [pageSize, fetchAbbreviations]);
 
   const handleSubmit = async () => {
     const cleanAbbr = sanitizeString(abbreviation.trim());
@@ -284,17 +316,8 @@ export default function AbbreviationUploader() {
     }
   };
 
-  // Client-side filtering within the current page (for quick search within loaded data)
-  // For full search, user should press Enter to trigger server search
-  const filteredAbbreviations = searchTerm.trim()
-    ? abbreviations.filter(a =>
-      a.abbreviation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      a.fullForm?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    : abbreviations;
-
-  // We use server-side pagination now, so filteredAbbreviations already represents one page
-  const paginatedAbbreviations = filteredAbbreviations;
+  // For search, we show all results; for normal view, server already paginated
+  const paginatedAbbreviations = abbreviations;
 
   return (
     <div style={styles.container}>
@@ -390,13 +413,15 @@ export default function AbbreviationUploader() {
       {/* Database */}
       <div style={styles.card}>
         <div style={styles.tableHeader}>
-          <h3 style={styles.cardTitle}>Database ({filteredAbbreviations.length})</h3>
-          <input
-            placeholder="Search..."
-            value={searchTerm}
-            onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-            style={styles.searchInput}
-          />
+          <h3 style={styles.cardTitle}>Database ({totalAbbreviations})</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
+            <input
+              placeholder="Start typing to search..."
+              ref={searchInputRef}
+              onChange={e => handleSearchChange(e.target.value)}
+              style={{ ...styles.searchInput, width: '100%' }}
+            />
+          </div>
         </div>
         <table style={styles.table}>
           <thead>
@@ -407,7 +432,7 @@ export default function AbbreviationUploader() {
             </tr>
           </thead>
           <tbody>
-            {loading && abbreviations.length === 0 ? (
+            {isFetching && abbreviations.length === 0 ? (
               <tr><td colSpan={3} style={styles.emptyCell}>Loading...</td></tr>
             ) : paginatedAbbreviations.length === 0 ? (
               <tr><td colSpan={3} style={styles.emptyCell}>No abbreviations found</td></tr>
@@ -447,13 +472,19 @@ export default function AbbreviationUploader() {
           totalPages={totalPages}
           totalItems={totalAbbreviations}
           pageSize={pageSize}
-          onPageChange={(page) => fetchAbbreviations(page, pageSize)}
+          onPageChange={(page) => {
+            if (!activeSearch.trim()) {
+              fetchAbbreviations(page, pageSize);
+            } else {
+              setCurrentPage(page);
+            }
+          }}
           onPageSizeChange={(size) => {
             setPageSize(size);
             setCurrentPage(1);
           }}
           pageSizeOptions={PAGE_SIZE_OPTIONS}
-          loading={loading}
+          loading={isFetching}
         />
       </div>
     </div>
@@ -498,4 +529,14 @@ const styles = {
   cancelBtn: { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #fecaca', color: '#dc2626', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
   pagination: { display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 16 },
   pageBtn: { background: '#e2e8f0', border: 'none', padding: '8px 16px', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
+  loadingText: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: '#64748b',
+    fontSize: '0.85rem',
+    fontStyle: 'italic',
+    pointerEvents: 'none'
+  },
 };
