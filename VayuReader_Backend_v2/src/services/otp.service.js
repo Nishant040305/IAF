@@ -82,12 +82,15 @@ const generateLoginToken = () => {
  * @param {string} otp - OTP code (plain text)
  * @returns {Promise<void>}
  */
-const saveOtp = async (identifier, otp, loginToken = '') => {
+const saveOtp = async (identifier, otp, loginToken = '', deviceId = '') => {
     const key = `${KEY_PREFIX}${identifier}`;
-    const encryptedOtp = encrypt(otp, loginToken);
+    const data = {
+        otp: encrypt(otp, loginToken),
+        deviceId
+    };
     const ttlSeconds = otpConfig.expiryMinutes * 60;
 
-    await redisClient.set(key, encryptedOtp, {
+    await redisClient.set(key, JSON.stringify(data), {
         EX: ttlSeconds
     });
 };
@@ -95,13 +98,18 @@ const saveOtp = async (identifier, otp, loginToken = '') => {
 /**
  * Retrieves and DECRYPTS OTP from Redis.
  */
-const getOtp = async (identifier, loginToken = '') => {
+const getOtpData = async (identifier) => {
     const key = `${KEY_PREFIX}${identifier}`;
-    const encryptedData = await redisClient.get(key);
+    const json = await redisClient.get(key);
 
-    if (!encryptedData) return null;
+    if (!json) return null;
 
-    return decrypt(encryptedData, loginToken);
+    try {
+        return JSON.parse(json);
+    } catch (err) {
+        // Fallback for old simple string values during transition
+        return { otp: json, deviceId: '' };
+    }
 };
 
 /**
@@ -115,18 +123,29 @@ const deleteOtp = async (identifier) => {
 /**
  * Verifies an OTP code against Redis value.
  */
-const verifyOtp = async (providedOtp, identifier, loginToken = '') => {
-    const storedOtp = await getOtp(identifier, loginToken);
+const verifyOtp = async (providedOtp, identifier, loginToken = '', providedDeviceId = '') => {
+    const data = await getOtpData(identifier);
 
-    if (!storedOtp) {
+    if (!data) {
         return {
             valid: false,
             error: 'OTP has expired or does not exist. Please request a new one.'
         };
     }
 
-    if (String(providedOtp) !== String(storedOtp)) {
-        console.warn(`[OTP] Mismatch for ${identifier}: provided=${providedOtp}, stored=${storedOtp}`);
+    // Verify Device ID if provided (lockdown)
+    if (data.deviceId && providedDeviceId && data.deviceId !== providedDeviceId) {
+        console.warn(`[OTP] Device mismatch for ${identifier}: stored=${data.deviceId}, provided=${providedDeviceId}`);
+        return {
+            valid: false,
+            error: 'Authentication failed: Device mismatch. Please login again from the original device.'
+        };
+    }
+
+    const decryptedOtp = decrypt(data.otp, loginToken);
+
+    if (!decryptedOtp || String(providedOtp) !== String(decryptedOtp)) {
+        console.warn(`[OTP] Mismatch for ${identifier}: provided=${providedOtp}`);
         return {
             valid: false,
             error: 'Invalid OTP'
@@ -150,7 +169,7 @@ module.exports = {
     generateOtp,
     generateLoginToken,
     saveOtp,
-    getOtp,
+    getOtpData,
     deleteOtp,
     verifyOtp,
     shouldSkipSend

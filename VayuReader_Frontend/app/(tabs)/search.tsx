@@ -28,6 +28,8 @@ type WordObj = {
   synonyms?: string[];
 };
 
+const PAGE_SIZE = 50;
+
 export default function DictionaryScreen() {
   const router = useRouter();
 
@@ -36,25 +38,90 @@ export default function DictionaryScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Pagination state for browsing all words
+  const [allWords, setAllWords] = useState<WordObj[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [browsingAll, setBrowsingAll] = useState(true);
+
   const filterValidWords = (words: WordObj[]) =>
     words.filter(word => word.meanings?.[0]?.definition?.trim());
 
-  const onRefresh = () => {
-    if (searchText.trim()) {
-      setRefreshing(true);
-      debouncedLookup(searchText.trim());
+  // Fetch all words with pagination (for browsing)
+  const fetchAllWords = useCallback(async (page: number = 1, isRefresh: boolean = false) => {
+    try {
+      if (page === 1) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      const res = await apiClient.get<any>('/api/dictionary/words/all', {
+        baseURL: DICT_BASE_URL,
+        params: {
+          page,
+          limit: PAGE_SIZE,
+        },
+      });
+
+      const responseData = res.data.data;
+      const words = responseData.words || [];
+      const filtered = filterValidWords(words);
+
+      if (page === 1 || isRefresh) {
+        setAllWords(filtered);
+      } else {
+        setAllWords(prev => [...prev, ...filtered]);
+      }
+
+      if (responseData.pagination) {
+        setTotalPages(responseData.pagination.totalPages || 1);
+        setCurrentPage(responseData.pagination.page || page);
+      }
+    } catch (err) {
+      console.error('Failed to fetch words', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      setLoadingMore(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    fetchAllWords(1);
+  }, [fetchAllWords]);
+
+  const loadMoreWords = () => {
+    if (!loadingMore && browsingAll && currentPage < totalPages) {
+      fetchAllWords(currentPage + 1);
     }
   };
 
+  const onRefresh = () => {
+    setRefreshing(true);
+    if (searchText.trim()) {
+      debouncedLookup(searchText.trim());
+    } else {
+      setBrowsingAll(true);
+      setCurrentPage(1);
+      fetchAllWords(1, true);
+    }
+  };
+
+  // Search functionality with debounce
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedLookup = useCallback((word: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = word.trim();
     if (!q) {
       setData([]);
+      setBrowsingAll(true);
       return;
     }
 
+    setBrowsingAll(false);
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
@@ -82,6 +149,7 @@ export default function DictionaryScreen() {
       if (searchText) {
         setSearchText('');
         setData([]);
+        setBrowsingAll(true);
         return true;
       }
       return false;
@@ -89,6 +157,9 @@ export default function DictionaryScreen() {
     const sub = BackHandler.addEventListener('hardwareBackPress', back);
     return () => sub.remove();
   }, [searchText]);
+
+  // Display data - search results or all words
+  const displayData = searchText.trim() ? data : allWords;
 
   const renderItem = ({ item }: { item: WordObj }) => {
     const meaning = item.meanings?.[0]?.definition ?? 'No definition';
@@ -128,24 +199,17 @@ export default function DictionaryScreen() {
         />
       </View>
 
-      {!searchText && data.length === 0 && !loading && (
-        <Text
-          className="text-center text-gray-400 mb-2 mt-10"
-          style={{ fontSize: 16 }}
-        >
-          Search a word to see its meaning.
-        </Text>
-      )}
-
-      {loading && (
+      {loading && displayData.length === 0 && (
         <View className="items-center justify-center my-4">
           <ActivityIndicator size="large" color="#5B5FEF" />
-          <Text className="text-white mt-2">Searching...</Text>
+          <Text className="text-white mt-2">
+            {searchText ? 'Searching...' : 'Loading...'}
+          </Text>
         </View>
       )}
 
       <FlatList
-        data={data}
+        data={displayData}
         keyExtractor={(item) => item.word}
         renderItem={renderItem}
         refreshControl={
@@ -160,8 +224,8 @@ export default function DictionaryScreen() {
         contentContainerStyle={{
           paddingHorizontal: 20,
           paddingBottom: 24,
-          flexGrow: data.length === 0 ? 1 : undefined,
-          justifyContent: data.length === 0 ? 'center' : undefined,
+          flexGrow: displayData.length === 0 ? 1 : undefined,
+          justifyContent: displayData.length === 0 ? 'center' : undefined,
         }}
         ListEmptyComponent={
           !loading ? (
@@ -171,10 +235,22 @@ export default function DictionaryScreen() {
             >
               {searchText
                 ? 'Word not found.'
-                : ''}
+                : 'Loading dictionary...'}
             </Text>
           ) : null
         }
+        ListFooterComponent={
+          loadingMore ? (
+            <View className="items-center py-4">
+              <ActivityIndicator size="small" color="#5B5FEF" />
+              <Text className="text-gray-400 mt-2">Loading more...</Text>
+            </View>
+          ) : browsingAll && currentPage < totalPages ? (
+            <Text className="text-center text-gray-500 py-4">Scroll for more</Text>
+          ) : null
+        }
+        onEndReached={browsingAll ? loadMoreWords : undefined}
+        onEndReachedThreshold={0.5}
       />
     </View>
   );

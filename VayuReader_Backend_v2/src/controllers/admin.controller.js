@@ -27,10 +27,10 @@ const { sanitizePhone, sanitizeName } = require('../utils/sanitize');
 const requestLoginOtp = async (req, res, next) => {
     try {
         const contact = sanitizePhone(req.body.contact);
-        const { password } = req.body;
+        const { password, deviceId } = req.body;
 
-        if (!contact || !password) {
-            return response.badRequest(res, 'Contact and password are required');
+        if (!contact || !password || !deviceId) {
+            return response.badRequest(res, 'Contact, password, and deviceId are required');
         }
 
         // Find admin by contact
@@ -55,7 +55,7 @@ const requestLoginOtp = async (req, res, next) => {
 
         // Password correct - Generate and send OTP (Factor 2: Something you have)
         const otp = generateOtp();
-        await saveOtp(contact, otp, loginToken); // OTP encrypted with login token
+        await saveOtp(contact, otp, loginToken, deviceId); // OTP encrypted with login token + deviceId stored separately
 
         // Send OTP via SMS (Asynchronously)
         sendOtpSms(contact, otp).catch(err => {
@@ -89,10 +89,10 @@ const requestLoginOtp = async (req, res, next) => {
 const verifyLoginOtp = async (req, res, next) => {
     try {
         const contact = sanitizePhone(req.body.contact);
-        const { otp, loginToken } = req.body;
+        const { otp, loginToken, deviceId } = req.body;
 
-        if (!contact || !otp || !loginToken) {
-            return response.badRequest(res, 'Contact, OTP, and loginToken are required');
+        if (!contact || !otp || !loginToken || !deviceId) {
+            return response.badRequest(res, 'Contact, OTP, loginToken, and deviceId are required');
         }
 
         const admin = await Admin.findOne({ contact });
@@ -101,8 +101,8 @@ const verifyLoginOtp = async (req, res, next) => {
             return response.unauthorized(res, 'Invalid credentials');
         }
 
-        // Verify OTP from Redis using login token (Factor 2: Something you have)
-        const verification = await verifyOtp(otp, contact, loginToken);
+        // Verify OTP from Redis using login token (Factor 2: Something you have) + deviceId
+        const verification = await verifyOtp(otp, contact, loginToken, deviceId);
 
         if (!verification.valid) {
             return response.badRequest(res, verification.error);

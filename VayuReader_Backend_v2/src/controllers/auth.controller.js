@@ -21,21 +21,31 @@ const requestLoginOtp = async (req, res, next) => {
     try {
         const phoneNumber = sanitizePhone(req.body.phone_number);
         const name = sanitizeName(req.body.name);
+        const { deviceId } = req.body;
+
+        console.log(`[AUTH] OTP Request - Phone: ${phoneNumber}, Name: ${name}, DeviceID: ${deviceId}`);
+
+        if (!deviceId) {
+            return response.badRequest(res, 'Device ID is required');
+        }
 
         // Find or create user
         let user = await User.findOne({ phone_number: phoneNumber });
 
         if (!user) {
-            user = new User({ name, phone_number: phoneNumber });
-        } else if (name && user.name !== name) {
-            user.name = name;
+            user = new User({ name, phone_number: phoneNumber, deviceId });
+        } else {
+            if (name && user.name !== name) user.name = name;
+            // Optionally update deviceId on new OTP request if we allow device switching
+            // For strict locking, we might want to prevent this if deviceId is already set
+            user.deviceId = deviceId;
         }
 
         // Generate and save OTP to Redis
         const otp = generateOtp();
-        await saveOtp(phoneNumber, otp);
+        await saveOtp(phoneNumber, otp, '', deviceId);
 
-        // Save user (for name updates/creation)
+        // Save user (for name updates/creation/deviceId)
         await user.save();
 
         // Send OTP via SMS (Asynchronously)
@@ -69,7 +79,13 @@ const requestLoginOtp = async (req, res, next) => {
 const verifyLoginOtp = async (req, res, next) => {
     try {
         const phoneNumber = sanitizePhone(req.body.phone_number);
-        const { otp } = req.body;
+        const { otp, deviceId } = req.body;
+
+        console.log(`[AUTH] OTP Verify - Phone: ${phoneNumber}, OTP: ${otp}, DeviceID: ${deviceId}`);
+
+        if (!otp || !deviceId) {
+            return response.badRequest(res, 'OTP and Device ID are required');
+        }
 
         // Find user
         const user = await User.findOne({ phone_number: phoneNumber });
@@ -79,7 +95,7 @@ const verifyLoginOtp = async (req, res, next) => {
         }
 
         // Verify OTP from Redis
-        const verification = await verifyOtp(otp, phoneNumber);
+        const verification = await verifyOtp(otp, phoneNumber, '', deviceId);
 
         if (!verification.valid) {
             return response.badRequest(res, verification.error);

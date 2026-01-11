@@ -22,10 +22,12 @@ services:
       - MONGODB_TLS=false
       - REDIS_URL=redis://redis:6379
       - PORT=3000
-      - ALLOWED_ORIGINS=http://localhost:3000,https://localhost:3000,http://localhost:3001,https://localhost:3001
+      - ALLOWED_ORIGINS=http://localhost,https://localhost,http://localhost:3000,https://localhost:3000,http://localhost:3001,https://localhost:3001,http://127.0.0.1:3000,https://127.0.0.1:3000
       - OTP_GATEWAY_URL=http://sms-simulator:8000/smsc/sends
     networks:
       - backend-network
+    ports:
+      - "3000:3000"
     volumes:
       - ./uploads:/usr/src/app/uploads
     healthcheck:

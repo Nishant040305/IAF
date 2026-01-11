@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { getDeviceId } from '@/lib/deviceId';
 
 import { icons } from '@/constants/icons';
 import { images } from '@/constants/images';
@@ -42,15 +43,16 @@ const LoginScreen = () => {
 
     try {
       setLoading(true);
+      const deviceId = await getDeviceId();
       await apiClient.post(
         '/api/auth/login/request-otp',
-        { name: trimmedName, phone_number: trimmedPhone },
+        { name: trimmedName, phone_number: trimmedPhone, deviceId },
         { baseURL: AUTH_BASE_URL }
       );
 
       router.push({
         pathname: '/auth/otp',
-        params: { phone_number: trimmedPhone, name: trimmedName },
+        params: { phone_number: trimmedPhone, name: trimmedName, deviceId },
       });
     } catch (err: any) {
       // console.error('OTP request failed', err?.response?.status, err?.response?.data, err?.message);

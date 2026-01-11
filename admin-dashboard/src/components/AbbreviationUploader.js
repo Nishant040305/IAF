@@ -7,8 +7,10 @@ import {
   parseAbbreviationCSV,
   sanitizeString
 } from '../utils/validateUpload';
+import Pagination from './Pagination';
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 // SVG icons
 const EditIcon = () => (
@@ -37,6 +39,9 @@ export default function AbbreviationUploader() {
   const [loading, setLoading] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalAbbreviations, setTotalAbbreviations] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   // Staged upload state
   const [stagedData, setStagedData] = useState(null);
@@ -52,17 +57,21 @@ export default function AbbreviationUploader() {
   };
 
   useEffect(() => {
-    fetchAbbreviations();
-  }, []);
+    fetchAbbreviations(1, pageSize);
+  }, [pageSize]);
 
-  const fetchAbbreviations = async () => {
+  // Server-side pagination - fetch only the current page
+  const fetchAbbreviations = async (page = 1, limit = pageSize) => {
     try {
       setLoading(true);
-      const response = await api.get('/api/abbreviations/all?limit=500', { timeout: 10000 });
+      const response = await api.get(`/api/abbreviations/all?page=${page}&limit=${limit}`, { timeout: 10000 });
       const data = response.data.data;
       // Handle paginated response
       if (data && data.abbreviations) {
         setAbbreviations(data.abbreviations);
+        setTotalPages(data.pagination?.totalPages || 1);
+        setTotalAbbreviations(data.pagination?.total || data.abbreviations.length);
+        setCurrentPage(data.pagination?.page || page);
       } else {
         // Fallback for old response format
         setAbbreviations(Array.isArray(data) ? data : []);
@@ -89,7 +98,7 @@ export default function AbbreviationUploader() {
       showMessage('Abbreviation added successfully', 'success');
       setAbbreviation('');
       setFullForm('');
-      await fetchAbbreviations();
+      await fetchAbbreviations(1, pageSize);
     } catch (error) {
       showMessage('Failed to add abbreviation.', 'error');
     } finally {
@@ -183,7 +192,7 @@ export default function AbbreviationUploader() {
       setStagedData(null);
       setStagedFileName('');
       setStagedFileType('');
-      await fetchAbbreviations();
+      await fetchAbbreviations(1, pageSize);
     } catch (err) {
       showMessage('Upload failed: ' + (err.message || 'Unknown error'), 'error');
     } finally {
@@ -240,7 +249,7 @@ export default function AbbreviationUploader() {
       setLoading(true);
       await api.delete(`/api/abbreviations/${id}`);
       showMessage('Abbreviation deleted', 'success');
-      await fetchAbbreviations();
+      await fetchAbbreviations(currentPage, pageSize);
     } catch (error) {
       showMessage('Delete failed.', 'error');
     } finally {
@@ -267,7 +276,7 @@ export default function AbbreviationUploader() {
       await api.put(`/api/abbreviations/${editingId}`, { abbreviation: cleanAbbr, fullForm: cleanForm });
       showMessage('Abbreviation updated', 'success');
       setEditingId(null);
-      await fetchAbbreviations();
+      await fetchAbbreviations(currentPage, pageSize);
     } catch (error) {
       showMessage('Update failed.', 'error');
     } finally {
@@ -275,12 +284,17 @@ export default function AbbreviationUploader() {
     }
   };
 
-  const filteredAbbreviations = abbreviations.filter(a =>
-    a.abbreviation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.fullForm?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const totalPages = Math.ceil(filteredAbbreviations.length / PAGE_SIZE) || 1;
-  const paginatedAbbreviations = filteredAbbreviations.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // Client-side filtering within the current page (for quick search within loaded data)
+  // For full search, user should press Enter to trigger server search
+  const filteredAbbreviations = searchTerm.trim()
+    ? abbreviations.filter(a =>
+      a.abbreviation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.fullForm?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    : abbreviations;
+
+  // We use server-side pagination now, so filteredAbbreviations already represents one page
+  const paginatedAbbreviations = filteredAbbreviations;
 
   return (
     <div style={styles.container}>
@@ -428,11 +442,19 @@ export default function AbbreviationUploader() {
             ))}
           </tbody>
         </table>
-        <div style={styles.pagination}>
-          <button style={styles.pageBtn} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Previous</button>
-          <span>Page {currentPage} of {totalPages}</span>
-          <button style={styles.pageBtn} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
-        </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalAbbreviations}
+          pageSize={pageSize}
+          onPageChange={(page) => fetchAbbreviations(page, pageSize)}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          }}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          loading={loading}
+        />
       </div>
     </div>
   );

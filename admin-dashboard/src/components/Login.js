@@ -7,6 +7,14 @@ export default function Login({ onLoginSuccess }) {
     const [password, setPassword] = useState('');
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const [loginToken, setLoginToken] = useState('');
+    const [deviceId] = useState(() => {
+        let id = localStorage.getItem('admin_device_id');
+        if (!id) {
+            id = 'dev-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now().toString(36);
+            localStorage.setItem('admin_device_id', id);
+        }
+        return id;
+    });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -68,7 +76,7 @@ export default function Login({ onLoginSuccess }) {
         setLoading(true);
         setError('');
         try {
-            const res = await api.post('/api/admin/login/request-otp', { contact, password });
+            const res = await api.post('/api/admin/login/request-otp', { contact, password, deviceId });
             setLoginToken(res.data.data.loginToken);
             setStep(2);
             if (res.data.data && res.data.data.otp) {
@@ -96,7 +104,8 @@ export default function Login({ onLoginSuccess }) {
             const res = await api.post('/api/admin/login/verify-otp', {
                 contact,
                 otp: otpString,
-                loginToken
+                loginToken,
+                deviceId
             });
             const { admin } = res.data.data;
             // JWT is now stored in HTTP-only cookie by the server
