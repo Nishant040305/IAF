@@ -86,7 +86,8 @@ userSchema.methods.toSafeObject = function () {
     return {
         id: this._id,
         name: this.name,
-        phone_number: this.phone_number
+        phone_number: this.phone_number,
+        deviceId: this.deviceId
     };
 };
 

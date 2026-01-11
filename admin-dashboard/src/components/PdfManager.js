@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import * as pdfjsLib from 'pdfjs-dist/webpack';
+import { usePdfEvents } from '../hooks/usePdfEvents';
+import { useNotifications, NotificationToast } from '../hooks/useNotifications';
+import Pagination from './Pagination';
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 // SVG icons
 const EditIcon = () => (
@@ -40,6 +44,7 @@ export default function PdfManager() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilterCategory, setSelectedFilterCategory] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   // Edit State
   const [editId, setEditId] = useState(null);
@@ -47,6 +52,54 @@ export default function PdfManager() {
   const [editContent, setEditContent] = useState('');
   const [editCategory, setEditCategory] = useState('');
   const [editFile, setEditFile] = useState(null);
+
+  // Notifications
+  const { notifications, addNotification, removeNotification } = useNotifications();
+
+  // SSE Event Handlers
+  const handlePdfAdded = useCallback((data) => {
+    // If on page 1 with no filters, refresh to show new PDF
+    if (currentPage === 1 && !searchTerm && !selectedFilterCategory) {
+      // Refresh the list to get the new PDF
+      api.get('/api/pdfs/all', { params: { page: 1, limit: DEFAULT_PAGE_SIZE } })
+        .then(res => {
+          const resData = res.data.data || res.data;
+          if (resData.documents) {
+            setPdfs(resData.documents);
+            setTotal(resData.pagination.total);
+            setTotalPages(resData.pagination.totalPages);
+          }
+        })
+        .catch(console.error);
+    }
+    addNotification(`📄 New PDF added: "${data.title}"`, 'success');
+    fetchCategories(); // Update categories in case it's a new one
+  }, [currentPage, searchTerm, selectedFilterCategory, addNotification]);
+
+  const handlePdfUpdated = useCallback((data) => {
+    // Update the PDF in the current list if it exists
+    setPdfs(prev => prev.map(pdf =>
+      pdf._id === data.id ? { ...pdf, title: data.title, category: data.category } : pdf
+    ));
+    addNotification(`✏️ PDF updated: "${data.title}"`, 'info');
+    fetchCategories();
+  }, [addNotification]);
+
+  const handlePdfDeleted = useCallback((data) => {
+    // Remove the PDF from the current list
+    setPdfs(prev => prev.filter(pdf => pdf._id !== data.id));
+    setTotal(prev => Math.max(0, prev - 1));
+    addNotification(`🗑️ PDF deleted: "${data.title}"`, 'warning');
+    fetchCategories();
+  }, [addNotification]);
+
+  // Subscribe to SSE events (DISABLED - set enabled: true to re-enable)
+  const { isConnected, connectionError } = usePdfEvents({
+    onPdfAdded: handlePdfAdded,
+    onPdfUpdated: handlePdfUpdated,
+    onPdfDeleted: handlePdfDeleted,
+    enabled: false,  // Disabled SSE
+  });
 
   // Fetch unique categories (for dropdowns)
   const fetchCategories = () => {
@@ -56,11 +109,11 @@ export default function PdfManager() {
   };
 
   // Fetch PDFs (Server-Side Pagination)
-  const fetchPdfs = () => {
+  const fetchPdfs = useCallback(() => {
     setLoading(true);
     const params = {
       page: currentPage,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       search: searchTerm || undefined,
       category: selectedFilterCategory || undefined
     };
@@ -93,7 +146,7 @@ export default function PdfManager() {
         setPdfs([]);
       })
       .finally(() => setLoading(false));
-  };
+  }, [currentPage, pageSize, searchTerm, selectedFilterCategory]);
 
   useEffect(() => {
     fetchCategories();
@@ -101,8 +154,7 @@ export default function PdfManager() {
 
   useEffect(() => {
     fetchPdfs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, searchTerm, selectedFilterCategory]);
+  }, [fetchPdfs]);
 
   const handleCategoryChange = (e) => {
     const value = e.target.value;
@@ -224,6 +276,22 @@ export default function PdfManager() {
 
   return (
     <div style={styles.wrapper}>
+      {/* Toast Notifications */}
+      <NotificationToast notifications={notifications} onRemove={removeNotification} />
+
+      {/* Connection Status - Disabled since SSE is off */}
+      {/* 
+      <div style={styles.connectionStatus}>
+        <span style={{
+          ...styles.connectionDot,
+          background: isConnected ? '#22c55e' : connectionError ? '#ef4444' : '#f59e0b'
+        }} />
+        <span style={styles.connectionText}>
+          {isConnected ? 'Live updates active' : connectionError ? 'Reconnecting...' : 'Connecting...'}
+        </span>
+      </div>
+      */}
+
       <h2>Upload PDF</h2>
       <input
         type="file"
@@ -387,23 +455,19 @@ export default function PdfManager() {
           ))}
         </tbody>
       </table>
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 24, gap: 12 }}>
-        <button
-          style={{ ...styles.button, opacity: currentPage === 1 ? 0.5 : 1 }}
-          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-          disabled={currentPage === 1}
-        >
-          Previous
-        </button>
-        <span>Page {currentPage} of {totalPages}</span>
-        <button
-          style={{ ...styles.button, opacity: currentPage === totalPages ? 0.5 : 1 }}
-          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-          disabled={currentPage === totalPages}
-        >
-          Next
-        </button>
-      </div>
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={total}
+        pageSize={pageSize}
+        onPageChange={(page) => setCurrentPage(page)}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setCurrentPage(1);
+        }}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        loading={loading}
+      />
     </div>
   );
 }
@@ -518,5 +582,25 @@ const styles = {
     fontSize: '1rem', cursor: 'pointer', padding: '4px 10px', borderRadius: 20,
     transition: 'background 0.2s, border 0.2s',
     fontWeight: 400,
+  },
+  connectionStatus: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '8px 12px',
+    background: '#f8fafc',
+    borderRadius: 8,
+    marginBottom: 16,
+    border: '1px solid #e2e8f0',
+  },
+  connectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: '50%',
+    flexShrink: 0,
+  },
+  connectionText: {
+    fontSize: 13,
+    color: '#64748b',
   },
 };

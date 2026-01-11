@@ -26,25 +26,63 @@ export default function Index() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  const fetchPdfs = async () => {
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const PAGE_SIZE = 50;
+
+  const fetchPdfs = async (page: number = 1, isRefresh: boolean = false) => {
     try {
-      setLoading(true);
+      if (page === 1) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
       const response = await apiClient.get<any>('/api/pdfs/all', {
         baseURL: PDF_BASE_URL,
+        params: {
+          page,
+          limit: PAGE_SIZE,
+        },
       });
-      const data = response.data.data.documents;
-      setAllPdfs(data.map((d: any) => ({ ...d, id: d._id })));
+
+      const data = response.data.data;
+      const documents = data.documents || [];
+      const mappedDocs = documents.map((d: any) => ({ ...d, id: d._id }));
+
+      if (page === 1 || isRefresh) {
+        setAllPdfs(mappedDocs);
+      } else {
+        // Append new documents for infinite scroll
+        setAllPdfs(prev => [...prev, ...mappedDocs]);
+      }
+
+      // Update pagination info
+      if (data.pagination) {
+        setTotalPages(data.pagination.totalPages || 1);
+        setCurrentPage(data.pagination.page || page);
+      }
     } catch (err) {
       Alert.alert('Error', 'Failed to fetch PDFs.');
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   };
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchPdfs();
+    setCurrentPage(1);
+    fetchPdfs(1, true);
+  };
+
+  const loadMorePdfs = () => {
+    if (!loadingMore && currentPage < totalPages) {
+      fetchPdfs(currentPage + 1);
+    }
   };
 
   useEffect(() => {
@@ -60,7 +98,7 @@ export default function Index() {
   }, [searchText]);
 
   useEffect(() => {
-    fetchPdfs();
+    fetchPdfs(1);
   }, []);
 
   const recentData = useMemo(
@@ -199,6 +237,15 @@ export default function Index() {
             </Text>
           ) : null
         }
+        ListFooterComponent={
+          loadingMore ? (
+            <Text className="text-center text-gray-400 py-4">Loading more...</Text>
+          ) : currentPage < totalPages && !searchText ? (
+            <Text className="text-center text-gray-500 py-4">Scroll for more</Text>
+          ) : null
+        }
+        onEndReached={searchText ? undefined : loadMorePdfs}
+        onEndReachedThreshold={0.5}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

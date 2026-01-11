@@ -25,6 +25,8 @@ const requestLoginOtp = async (req, res, next) => {
         const name = sanitizeName(req.body.name);
         const { deviceId } = req.body;
 
+        console.log(`[AUTH] OTP Request - Phone: ${phoneNumber}, Name: ${name}, DeviceID: ${deviceId}`);
+
         // Validate deviceId is provided
         if (!deviceId || typeof deviceId !== 'string' || deviceId.trim() === '') {
             return response.badRequest(res, 'Device ID is required');
@@ -36,7 +38,7 @@ const requestLoginOtp = async (req, res, next) => {
         let user = await User.findOne({ phone_number: phoneNumber });
 
         if (!user) {
-            user = new User({ name, phone_number: phoneNumber });
+            user = new User({ name, phone_number: phoneNumber, deviceId: sanitizedDeviceId });
         } else {
             if (user.isBlocked) {
                 return response.unauthorized(res, 'Your account has been blocked. Please contact support.');
@@ -44,13 +46,15 @@ const requestLoginOtp = async (req, res, next) => {
             if (name && user.name !== name) {
                 user.name = name;
             }
+            // Update deviceId on new OTP request
+            user.deviceId = sanitizedDeviceId;
         }
 
         // Generate and save OTP to Redis (encrypted with deviceId)
         const otp = generateOtp();
-        await saveOtp(phoneNumber, otp, sanitizedDeviceId);
+        await saveOtp(phoneNumber, otp, '', sanitizedDeviceId);
 
-        // Save user (for name updates/creation)
+        // Save user (for name updates/creation/deviceId)
         await user.save();
 
         // Send OTP via SMS (Asynchronously)
@@ -87,9 +91,15 @@ const verifyLoginOtp = async (req, res, next) => {
         const phoneNumber = sanitizePhone(req.body.phone_number);
         const { otp, deviceId } = req.body;
 
+        console.log(`[AUTH] OTP Verify - Phone: ${phoneNumber}, OTP: ${otp}, DeviceID: ${deviceId}`);
+
         // Validate deviceId is provided
         if (!deviceId || typeof deviceId !== 'string' || deviceId.trim() === '') {
             return response.badRequest(res, 'Device ID is required');
+        }
+
+        if (!otp) {
+            return response.badRequest(res, 'OTP is required');
         }
 
         const sanitizedDeviceId = deviceId.trim();
@@ -106,7 +116,7 @@ const verifyLoginOtp = async (req, res, next) => {
         }
 
         // Verify OTP from Redis (decrypted using deviceId)
-        const verification = await verifyOtp(otp, phoneNumber, sanitizedDeviceId);
+        const verification = await verifyOtp(otp, phoneNumber, '', sanitizedDeviceId);
 
         if (!verification.valid) {
             return response.badRequest(res, verification.error);

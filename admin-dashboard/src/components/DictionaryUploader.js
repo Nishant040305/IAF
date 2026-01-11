@@ -8,8 +8,10 @@ import {
   parseDictionaryCSV,
   sanitizeString
 } from '../utils/validateUpload';
+import Pagination from './Pagination';
 
-const PAGE_SIZE = 50; // Matches backend default
+const DEFAULT_PAGE_SIZE = 50; // Matches backend default
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 // SVG icons
 const EditIcon = () => (
@@ -51,6 +53,7 @@ export default function DictionaryUploader() {
   const searchInputRef = useRef(null); // Ref for input element
   const [totalPages, setTotalPages] = useState(1);
   const [totalWords, setTotalWords] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   // Edit
   const [editingId, setEditingId] = useState(null);
@@ -70,6 +73,7 @@ export default function DictionaryUploader() {
       searchWords(value);
     } else {
       setSearchResults([]);
+      fetchWords(1, pageSize);
     }
   }, 300);
 
@@ -79,10 +83,10 @@ export default function DictionaryUploader() {
   };
 
   // Fetch words with pagination
-  const fetchWords = useCallback(async (page = 1) => {
+  const fetchWords = useCallback(async (page = 1, limit = DEFAULT_PAGE_SIZE) => {
     try {
       setIsFetching(true);
-      const res = await api.get(`/api/dictionary/words/all?page=${page}&limit=${PAGE_SIZE}`);
+      const res = await api.get(`/api/dictionary/words/all?page=${page}&limit=${limit}`);
       const data = res.data.data;
       // Handle paginated response
       if (data && data.words) {
@@ -119,12 +123,10 @@ export default function DictionaryUploader() {
     }
   }, []);
 
-  // Initial load
+  // Initial load and page size change
   useEffect(() => {
-    fetchWords(1);
-  }, [fetchWords]);
-
-  // Remove the useEffect for debouncedSearchTerm since we use callback now
+    fetchWords(1, pageSize);
+  }, [pageSize, fetchWords]);
 
   const handleAddSingle = async () => {
     const word = sanitizeString(newWord.trim().toUpperCase());
@@ -156,7 +158,7 @@ export default function DictionaryUploader() {
       setNewDefinition('');
       setNewSynonyms('');
       setNewAntonyms('');
-      await fetchWords(); // Refresh the word list
+      await fetchWords(1, pageSize); // Refresh the word list
     } catch (err) {
       showMessage(err.response?.data?.message || 'Failed to add word', 'error');
     } finally {
@@ -252,7 +254,7 @@ export default function DictionaryUploader() {
       setStagedData(null);
       setStagedFileName('');
       setStagedEntryCount(0);
-      await fetchWords(); // Refresh the word list
+      await fetchWords(1, pageSize); // Refresh the word list
     } catch (err) {
       showMessage('Upload failed: ' + (err.message || 'Unknown error'), 'error');
     } finally {
@@ -308,12 +310,6 @@ export default function DictionaryUploader() {
     }
   };
 
-  const handleSearch = () => {
-    // Manual search via button is removed, but we keep this empty or remove it. 
-    // The component code used it earlier but we replaced the button UI.
-    // However if there are references left, we can leave this no-op or remove.
-  };
-
   const handleEdit = (wordData) => {
     setEditingId(wordData._id);
     setEditWord(wordData.word);
@@ -345,7 +341,7 @@ export default function DictionaryUploader() {
       await api.put(`/api/dictionary/${editingId}`, updateData);
       showMessage('Word updated successfully', 'success');
       setEditingId(null);
-      await fetchWords();
+      await fetchWords(currentPage, pageSize);
     } catch (err) {
       showMessage(err.response?.data?.message || 'Update failed', 'error');
     } finally {
@@ -360,7 +356,7 @@ export default function DictionaryUploader() {
       setLoading(true);
       await api.delete(`/api/dictionary/${id}`);
       showMessage('Word deleted successfully', 'success');
-      await fetchWords();
+      await fetchWords(currentPage, pageSize);
     } catch (err) {
       showMessage(err.response?.data?.message || 'Delete failed', 'error');
     } finally {
@@ -371,9 +367,9 @@ export default function DictionaryUploader() {
   // Use searchResults if searching, otherwise show all words
   const displayWords = activeSearch.trim() ? searchResults : allWords;
   // For search, use client-side pagination; for all words, server already paginated
-  const displayTotalPages = activeSearch.trim() ? Math.ceil(searchResults.length / PAGE_SIZE) || 1 : totalPages;
+  const displayTotalPages = activeSearch.trim() ? Math.ceil(searchResults.length / pageSize) || 1 : totalPages;
   const paginatedResults = activeSearch.trim()
-    ? displayWords.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+    ? displayWords.slice((currentPage - 1) * pageSize, currentPage * pageSize)
     : displayWords; // Server already paginated
 
   return (
@@ -521,31 +517,22 @@ export default function DictionaryUploader() {
             ))}
           </tbody>
         </table>
-        <div style={styles.pagination}>
-          <button
-            style={styles.pageBtn}
-            onClick={() => {
-              const newPage = Math.max(1, currentPage - 1);
-              setCurrentPage(newPage);
-              if (!activeSearch.trim()) fetchWords(newPage);
-            }}
-            disabled={currentPage === 1}
-          >
-            Previous
-          </button>
-          <span>Page {currentPage} of {displayTotalPages} {totalWords > 0 && `(${totalWords} total)`}</span>
-          <button
-            style={styles.pageBtn}
-            onClick={() => {
-              const newPage = Math.min(displayTotalPages, currentPage + 1);
-              setCurrentPage(newPage);
-              if (!activeSearch.trim()) fetchWords(newPage);
-            }}
-            disabled={currentPage === displayTotalPages}
-          >
-            Next
-          </button>
-        </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={displayTotalPages}
+          totalItems={activeSearch.trim() ? searchResults.length : totalWords}
+          pageSize={pageSize}
+          onPageChange={(page) => {
+            setCurrentPage(page);
+            if (!activeSearch.trim()) fetchWords(page, pageSize);
+          }}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setCurrentPage(1);
+          }}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          loading={isFetching}
+        />
       </div>
     </div>
   );
