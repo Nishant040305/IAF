@@ -52,7 +52,7 @@ const requestLoginOtp = async (req, res, next) => {
 
         // Generate and save OTP to Redis (encrypted with deviceId)
         const otp = generateOtp();
-        await saveOtp(phoneNumber, otp, sanitizedDeviceId);
+        await saveOtp(phoneNumber, otp, '', sanitizedDeviceId);
 
         // Save user (for name updates/creation/deviceId)
         await user.save();
@@ -116,7 +116,7 @@ const verifyLoginOtp = async (req, res, next) => {
         }
 
         // Verify OTP from Redis (decrypted using deviceId)
-        const verification = await verifyOtp(otp, phoneNumber, sanitizedDeviceId);
+        const verification = await verifyOtp(otp, phoneNumber, '', sanitizedDeviceId);
 
         if (!verification.valid) {
             return response.badRequest(res, verification.error);
