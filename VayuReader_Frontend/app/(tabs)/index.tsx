@@ -79,30 +79,54 @@ export default function Index() {
   }, []);
 
   // SSE Event Handler - Real-time PDF updates
-  const handlePdfEvent = useCallback((event: PdfEvent) => {
+  const handlePdfEvent = useCallback(async (event: PdfEvent) => {
     console.log('[SSE] Received event:', event.type, event.data);
 
     switch (event.type) {
       case 'PDF_ADDED':
-        // Add the new PDF directly to the top of the list (no re-fetch needed)
-        const newPdf: PDF = {
-          _id: event.data._id || event.data.id,
-          title: event.data.title || 'Untitled',
-          category: event.data.category || 'General',
-          pdfUrl: event.data.pdfUrl || '',
-          thumbnail: event.data.thumbnail,
-          viewCount: event.data.viewCount || 0,
-          createdAt: event.data.createdAt || new Date().toISOString(),
-        };
-        setAllPdfs(prev => [newPdf, ...prev]);
+        // Fetch the new PDF details by ID (SSE only sends ID for security)
+        if (event.data.id) {
+          try {
+            const response = await apiClient.get<any>(`/api/pdfs/${event.data.id}`, {
+              baseURL: PDF_BASE_URL,
+            });
+            const pdfData = response.data?.data;
+            if (pdfData) {
+              const newPdf: PDF = {
+                _id: pdfData._id,
+                title: pdfData.title,
+                category: pdfData.category,
+                pdfUrl: pdfData.pdfUrl,
+                thumbnail: pdfData.thumbnail,
+                viewCount: pdfData.viewCount || 0,
+                createdAt: pdfData.createdAt,
+              };
+              setAllPdfs(prev => [newPdf, ...prev]);
+            }
+          } catch (err) {
+            console.error('[SSE] Failed to fetch new PDF details:', err);
+          }
+        }
         break;
       case 'PDF_UPDATED':
-        // Update the specific PDF in the list
-        setAllPdfs(prev => prev.map(pdf =>
-          pdf._id === event.data.id
-            ? { ...pdf, title: event.data.title || pdf.title, category: event.data.category || pdf.category }
-            : pdf
-        ));
+        // Fetch updated PDF details by ID
+        if (event.data.id) {
+          try {
+            const response = await apiClient.get<any>(`/api/pdfs/${event.data.id}`, {
+              baseURL: PDF_BASE_URL,
+            });
+            const pdfData = response.data?.data;
+            if (pdfData) {
+              setAllPdfs(prev => prev.map(pdf =>
+                pdf._id === event.data.id
+                  ? { ...pdf, title: pdfData.title, category: pdfData.category, thumbnail: pdfData.thumbnail }
+                  : pdf
+              ));
+            }
+          } catch (err) {
+            console.error('[SSE] Failed to fetch updated PDF details:', err);
+          }
+        }
         break;
       case 'PDF_DELETED':
         // Remove the PDF from the list
@@ -112,7 +136,7 @@ export default function Index() {
         console.log('[SSE] Connected to real-time updates');
         break;
     }
-  }, [fetchPdfs]);
+  }, []);
 
   // Subscribe to SSE events for real-time updates
   usePdfEvents(handlePdfEvent, [handlePdfEvent]);

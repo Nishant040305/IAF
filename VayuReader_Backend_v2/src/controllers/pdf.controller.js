@@ -200,17 +200,9 @@ const uploadPdf = async (req, res, next) => {
             category: newDoc.category
         });
 
-        // Publish real-time event with complete PDF data
+        // Publish real-time event with only ID (user fetches details via authenticated endpoint)
         await publishPdfEvent(PDF_EVENTS.ADDED, {
-            id: newDoc._id.toString(),
-            _id: newDoc._id.toString(),
-            title: newDoc.title,
-            content: newDoc.content,
-            category: newDoc.category,
-            pdfUrl: newDoc.pdfUrl,
-            thumbnail: newDoc.thumbnail,
-            viewCount: newDoc.viewCount,
-            createdAt: newDoc.createdAt
+            id: newDoc._id.toString()
         });
 
         // Invalidate categories cache
@@ -260,12 +252,9 @@ const updatePdf = async (req, res, next) => {
             new: { title: updated.title }
         });
 
-        // Publish real-time event
+        // Publish real-time event with only ID (user fetches details via authenticated endpoint)
         await publishPdfEvent(PDF_EVENTS.UPDATED, {
-            id: updated._id.toString(),
-            title: updated.title,
-            category: updated.category,
-            updatedAt: updated.updatedAt
+            id: updated._id.toString()
         });
 
         // Invalidate categories cache

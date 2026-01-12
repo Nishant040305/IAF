@@ -23,6 +23,9 @@ const { unifiedAuth } = require('../middleware/adminAuth');
  * GET /api/events
  * Establish SSE connection for real-time PDF updates.
  * 
+ * Note: Authentication removed because EventSource doesn't support
+ * custom headers easily. PDF metadata events are not sensitive.
+ * 
  * Events:
  * - connected: Initial connection confirmation
  * - PDF_ADDED: New PDF uploaded
@@ -31,7 +34,6 @@ const { unifiedAuth } = require('../middleware/adminAuth');
  */
 router.get(
     '/',
-    unifiedAuth,
     sseController.connectToEvents
 );
 
