@@ -203,6 +203,13 @@ export default function PdfManager() {
       alert('Please provide PDF file, title, and category');
       return;
     }
+
+    // Validate file type
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      alert('Invalid file type. Please upload a PDF file only.');
+      return;
+    }
+
     const formData = new FormData();
     formData.append('pdf', file);
     formData.append('title', title);
@@ -211,34 +218,41 @@ export default function PdfManager() {
     const reader = new FileReader();
     reader.onload = async function () {
       const typedarray = new Uint8Array(this.result);
-      const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
-      const page = await pdf.getPage(1);
-      const viewport = page.getViewport({ scale: 1.5 });
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      await page.render({ canvasContext: context, viewport }).promise;
-      canvas.toBlob(async (blob) => {
-        if (blob) formData.append('thumbnail', blob, 'thumbnail.jpg');
-        try {
-          await api.post('/api/pdfs/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          });
-          alert('PDF uploaded');
-          setFile(null);
-          setThumbnail(null);
-          setTitle('');
-          setContent('');
-          setCategory('');
-          setShowNewCategoryInput(false);
-          setNewCategory('');
-          fetchPdfs();
-          fetchCategories();
-        } catch (err) {
-          alert(err.response?.data?.message || err.response?.data?.msg || 'Upload error');
-        }
-      }, 'image/jpeg');
+
+      try {
+        const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: context, viewport }).promise;
+        canvas.toBlob(async (blob) => {
+          if (blob) formData.append('thumbnail', blob, 'thumbnail.jpg');
+          try {
+            await api.post('/api/pdfs/upload', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            alert('PDF uploaded');
+            setFile(null);
+            setThumbnail(null);
+            setTitle('');
+            setContent('');
+            setCategory('');
+            setShowNewCategoryInput(false);
+            setNewCategory('');
+            fetchPdfs();
+            fetchCategories();
+          } catch (err) {
+            alert(err.response?.data?.message || err.response?.data?.msg || 'Upload error');
+          }
+        }, 'image/jpeg');
+      } catch (pdfError) {
+        console.error('PDF processing error:', pdfError);
+        alert('Invalid PDF file. The file appears to be corrupted or is not a valid PDF document.');
+        setFile(null);
+      }
     };
     reader.readAsArrayBuffer(file);
   };
