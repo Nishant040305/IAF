@@ -27,10 +27,10 @@ const { sanitizePhone, sanitizeName } = require('../utils/sanitize');
 const requestLoginOtp = async (req, res, next) => {
     try {
         const contact = sanitizePhone(req.body.contact);
-        const { password, deviceId } = req.body;
+        const { password } = req.body;
 
-        if (!contact || !password || !deviceId) {
-            return response.badRequest(res, 'Contact, password, and deviceId are required');
+        if (!contact || !password) {
+            return response.badRequest(res, 'Contact and password are required');
         }
 
         // Find admin by contact
@@ -55,7 +55,7 @@ const requestLoginOtp = async (req, res, next) => {
 
         // Password correct - Generate and send OTP (Factor 2: Something you have)
         const otp = generateOtp();
-        await saveOtp(contact, otp, loginToken, deviceId); // OTP encrypted with login token + deviceId stored separately
+        await saveOtp(contact, otp, loginToken); // OTP encrypted with login token + deviceId stored separately
 
         // Send OTP via SMS (Asynchronously)
         sendOtpSms(contact, otp).catch(err => {
@@ -89,9 +89,9 @@ const requestLoginOtp = async (req, res, next) => {
 const verifyLoginOtp = async (req, res, next) => {
     try {
         const contact = sanitizePhone(req.body.contact);
-        const { otp, loginToken, deviceId } = req.body;
+        const { otp, loginToken } = req.body;
 
-        if (!contact || !otp || !loginToken || !deviceId) {
+        if (!contact || !otp || !loginToken) {
             return response.badRequest(res, 'Contact, OTP, loginToken, and deviceId are required');
         }
 
@@ -102,7 +102,7 @@ const verifyLoginOtp = async (req, res, next) => {
         }
 
         // Verify OTP from Redis using login token (Factor 2: Something you have) + deviceId
-        const verification = await verifyOtp(otp, contact, loginToken, deviceId);
+        const verification = await verifyOtp(otp, contact, loginToken);
 
         if (!verification.valid) {
             return response.badRequest(res, verification.error);
