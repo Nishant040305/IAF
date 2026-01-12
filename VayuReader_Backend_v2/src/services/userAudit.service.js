@@ -94,10 +94,30 @@ const logPdfRead = (user, deviceId, pdfInfo) => {
     );
 };
 
+/**
+ * Logs a name change attempt.
+ * 
+ * @param {Object} user - User document
+ * @param {string} deviceId - Device ID
+ * @param {string} previousName - Old name
+ * @param {string} requestedName - Requested new name
+ * @param {boolean} allowed - Whether the change was allowed
+ */
+const logNameChange = (user, deviceId, previousName, requestedName, allowed = true) => {
+    return logUserAction(
+        user._id,
+        user.phone_number,
+        USER_ACTIONS.NAME_CHANGE,
+        deviceId,
+        { previousName, requestedName, allowed }
+    );
+};
+
 module.exports = {
     USER_ACTIONS,
     logUserAction,
     logLogin,
     logDeviceChange,
+    logNameChange,
     logPdfRead
 };

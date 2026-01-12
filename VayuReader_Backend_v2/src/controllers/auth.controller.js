@@ -8,16 +8,18 @@
 
 const User = require('../models/User');
 const { generateLifetimeUserToken } = require('../services/jwt.service');
-const { generateOtp, saveOtp, verifyOtp, deleteOtp, shouldSkipSend } = require('../services/otp.service');
+const { generateOtp, generateLoginToken, saveOtp, verifyOtp, deleteOtp, shouldSkipSend } = require('../services/otp.service');
 const { sendOtpSms } = require('../services/sms.service');
-const { logLogin, logDeviceChange } = require('../services/userAudit.service');
+const { logLogin, logDeviceChange, logNameChange } = require('../services/userAudit.service');
 const response = require('../utils/response');
 const { sanitizePhone, sanitizeName } = require('../utils/sanitize');
 
 /**
  * Request OTP for user login.
  * Creates user if doesn't exist.
- * Requires deviceId for device-bound OTP encryption.
+ * Generates a temporary loginToken for OTP encryption.
+ * Device ID is NOT updated until after successful OTP verification.
+ * Name can ONLY be set during initial registration, not changed afterwards.
  */
 const requestLoginOtp = async (req, res, next) => {
     try {
@@ -34,28 +36,44 @@ const requestLoginOtp = async (req, res, next) => {
 
         const sanitizedDeviceId = deviceId.trim();
 
-        // Find or create user
+        // Find or create user (DO NOT update deviceId yet - wait for OTP verification)
         let user = await User.findOne({ phone_number: phoneNumber });
+        let isNewUser = false;
 
         if (!user) {
-            user = new User({ name, phone_number: phoneNumber, deviceId: sanitizedDeviceId });
+            // New user - create but don't save deviceId yet (will be set after OTP verification)
+            // Name is ONLY set during initial registration
+            user = new User({ name, phone_number: phoneNumber });
+            isNewUser = true;
         } else {
             if (user.isBlocked) {
                 return response.unauthorized(res, 'Your account has been blocked. Please contact support.');
             }
+
+            // Name changes are allowed but AUDITED for existing users
             if (name && user.name !== name) {
+                console.log(`[AUTH] Name change - Phone: ${phoneNumber}, From: ${user.name}, To: ${name}`);
+                // Log the name change for audit (allowed: true)
+                logNameChange(user, sanitizedDeviceId, user.name, name, true);
+                // Update the name
                 user.name = name;
             }
-            // Update deviceId on new OTP request
-            user.deviceId = sanitizedDeviceId;
+
+            // DO NOT update deviceId here - this is the security fix!
+            // DeviceId will only be updated after successful OTP verification
         }
 
-        // Generate and save OTP to Redis (encrypted with deviceId)
-        const otp = generateOtp();
-        await saveOtp(phoneNumber, otp, '', sanitizedDeviceId);
+        // Generate a temporary login token for OTP encryption (instead of deviceId)
+        const loginToken = generateLoginToken();
 
-        // Save user (for name updates/creation/deviceId)
-        await user.save();
+        // Generate OTP and save to Redis (encrypted with loginToken, deviceId stored for verification)
+        const otp = generateOtp();
+        await saveOtp(phoneNumber, otp, loginToken, sanitizedDeviceId);
+
+        // Save user (for new user creation or name updates)
+        if (isNewUser || user.isModified('name')) {
+            await user.save();
+        }
 
         // Send OTP via SMS (Asynchronously)
         sendOtpSms(phoneNumber, otp).catch(err => {
@@ -64,11 +82,12 @@ const requestLoginOtp = async (req, res, next) => {
 
         const isDevMode = shouldSkipSend();
 
-        // Response
+        // Response - include loginToken for client to use in verification
         const responseData = {
             message: isDevMode
                 ? 'OTP generated (DEV MODE - SMS skipped)'
-                : 'OTP request received'
+                : 'OTP request received',
+            loginToken // Client must send this back during verification
         };
 
         // Include OTP in dev mode for testing
@@ -85,21 +104,26 @@ const requestLoginOtp = async (req, res, next) => {
 /**
  * Verify OTP and complete login.
  * Handles device binding and change detection.
+ * Requires loginToken from OTP request for decryption.
  */
 const verifyLoginOtp = async (req, res, next) => {
     try {
         const phoneNumber = sanitizePhone(req.body.phone_number);
-        const { otp, deviceId } = req.body;
+        const { otp, deviceId, loginToken } = req.body;
 
         console.log(`[AUTH] OTP Verify - Phone: ${phoneNumber}, OTP: ${otp}, DeviceID: ${deviceId}`);
 
-        // Validate deviceId is provided
+        // Validate required fields
         if (!deviceId || typeof deviceId !== 'string' || deviceId.trim() === '') {
             return response.badRequest(res, 'Device ID is required');
         }
 
         if (!otp) {
             return response.badRequest(res, 'OTP is required');
+        }
+
+        if (!loginToken) {
+            return response.badRequest(res, 'Login token is required. Please request OTP again.');
         }
 
         const sanitizedDeviceId = deviceId.trim();
@@ -115,8 +139,8 @@ const verifyLoginOtp = async (req, res, next) => {
             return response.unauthorized(res, 'Your account has been blocked. Please contact support.');
         }
 
-        // Verify OTP from Redis (decrypted using deviceId)
-        const verification = await verifyOtp(otp, phoneNumber, '', sanitizedDeviceId);
+        // Verify OTP from Redis (decrypted using loginToken, deviceId verified separately)
+        const verification = await verifyOtp(otp, phoneNumber, loginToken, sanitizedDeviceId);
 
         if (!verification.valid) {
             return response.badRequest(res, verification.error);

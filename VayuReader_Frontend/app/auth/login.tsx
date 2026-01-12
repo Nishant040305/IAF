@@ -44,15 +44,18 @@ const LoginScreen = () => {
     try {
       setLoading(true);
       const deviceId = await getDeviceId();
-      await apiClient.post(
+      const response = await apiClient.post(
         '/api/auth/login/request-otp',
         { name: trimmedName, phone_number: trimmedPhone, deviceId },
         { baseURL: AUTH_BASE_URL }
       );
 
+      // Extract loginToken from response for secure OTP verification
+      const loginToken = response.data?.data?.loginToken || '';
+
       router.push({
         pathname: '/auth/otp',
-        params: { phone_number: trimmedPhone, name: trimmedName, deviceId },
+        params: { phone_number: trimmedPhone, name: trimmedName, deviceId, loginToken },
       });
     } catch (err: any) {
       // console.error('OTP request failed', err?.response?.status, err?.response?.data, err?.message);

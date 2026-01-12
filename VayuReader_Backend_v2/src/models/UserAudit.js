@@ -15,6 +15,7 @@ const mongoose = require('mongoose');
 const USER_ACTIONS = {
     LOGIN: 'LOGIN',
     DEVICE_CHANGE: 'DEVICE_CHANGE',
+    NAME_CHANGE: 'NAME_CHANGE',
     READ_PDF: 'READ_PDF'
 };
 

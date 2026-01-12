@@ -22,10 +22,13 @@ import { AuthUser } from '@/lib/authStorage';
 const OtpScreen = () => {
   const router = useRouter();
   const { signIn } = useAuth();
-  const params = useLocalSearchParams<{ phone_number?: string; name?: string; deviceId?: string }>();
+  const params = useLocalSearchParams<{ phone_number?: string; name?: string; deviceId?: string; loginToken?: string }>();
   const phoneNumber = useMemo(() => params.phone_number ?? '', [params.phone_number]);
   const name = useMemo(() => params.name ?? '', [params.name]);
   const deviceId = useMemo(() => params.deviceId ?? '', [params.deviceId]);
+
+  // loginToken is received from OTP request and used for secure verification
+  const [currentLoginToken, setCurrentLoginToken] = useState(params.loginToken ?? '');
 
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
@@ -68,7 +71,7 @@ const OtpScreen = () => {
       setLoading(true);
       const response = await apiClient.post(
         '/api/auth/login/verify-otp',
-        { phone_number: phoneNumber, otp: otpValue, deviceId },
+        { phone_number: phoneNumber, otp: otpValue, deviceId, loginToken: currentLoginToken },
         { baseURL: AUTH_BASE_URL }
       );
 
@@ -109,11 +112,21 @@ const OtpScreen = () => {
 
     try {
       setResending(true);
-      await apiClient.post(
+      setError('');
+      const response = await apiClient.post(
         '/api/auth/login/request-otp',
         { name, phone_number: phoneNumber, deviceId },
         { baseURL: AUTH_BASE_URL }
       );
+
+      // Update loginToken with new token from resend response
+      const newLoginToken = response.data?.data?.loginToken || '';
+      if (newLoginToken) {
+        setCurrentLoginToken(newLoginToken);
+      }
+
+      // Clear OTP fields on resend
+      setDigits(['', '', '', '', '', '']);
     } catch (err: any) {
       const message = err?.response?.data?.message || 'Failed to resend OTP.';
       setError(message);
