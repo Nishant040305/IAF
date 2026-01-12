@@ -17,6 +17,8 @@ import {
 } from 'react-native';
 
 import SearchBar from '@/components/SearchBar';
+import { ListSkeleton } from '@/components/Skeleton';
+import EmptyState from '@/components/EmptyState';
 import { DICT_BASE_URL } from '@/constants/config';
 import { icons } from '@/constants/icons';
 import { images } from '@/constants/images';
@@ -200,12 +202,7 @@ export default function DictionaryScreen() {
       </View>
 
       {loading && displayData.length === 0 && (
-        <View className="items-center justify-center my-4">
-          <ActivityIndicator size="large" color="#5B5FEF" />
-          <Text className="text-white mt-2">
-            {searchText ? 'Searching...' : 'Loading...'}
-          </Text>
-        </View>
+        <ListSkeleton count={8} />
       )}
 
       <FlatList
@@ -229,14 +226,11 @@ export default function DictionaryScreen() {
         }}
         ListEmptyComponent={
           !loading ? (
-            <Text
-              className="text-center text-gray-400 mt-10 px-5"
-              style={{ fontSize: 15 }}
-            >
-              {searchText
-                ? 'Word not found.'
-                : 'Loading dictionary...'}
-            </Text>
+            <EmptyState
+              type="dictionary"
+              searchQuery={searchText || undefined}
+              message={searchText ? 'Try a different spelling' : 'Start typing to search'}
+            />
           ) : null
         }
         ListFooterComponent={
@@ -251,6 +245,11 @@ export default function DictionaryScreen() {
         }
         onEndReached={browsingAll ? loadMoreWords : undefined}
         onEndReachedThreshold={0.5}
+        // Performance optimizations
+        initialNumToRender={15}
+        maxToRenderPerBatch={20}
+        windowSize={10}
+        removeClippedSubviews={true}
       />
     </View>
   );

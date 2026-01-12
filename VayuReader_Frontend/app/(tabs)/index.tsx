@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   BackHandler,
@@ -11,6 +11,8 @@ import {
 
 import PDFCard from "@/components/PDFCard";
 import SearchBar from "@/components/SearchBar";
+import { PDFGridSkeleton } from "@/components/Skeleton";
+import EmptyState from "@/components/EmptyState";
 import { PDF_BASE_URL } from '@/constants/config';
 import { icons } from "@/constants/icons";
 import { images } from "@/constants/images";
@@ -23,8 +25,10 @@ export default function Index() {
   const [allPdfs, setAllPdfs] = useState<PDF[]>([]);
   const [activeCat, setActiveCat] = useState<string>('All');
   const [searchText, setSearchText] = useState<string>('');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -116,11 +120,26 @@ export default function Index() {
     [allPdfs]
   );
 
+  // Debounced search - waits 300ms after user stops typing
+  useEffect(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    debounceTimer.current = setTimeout(() => {
+      setDebouncedSearch(searchText);
+    }, 300);
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [searchText]);
+
   const searchResults = useMemo(() => {
-    const q = searchText.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     if (!q) return [];
     return allPdfs.filter(p => p.title.toLowerCase().includes(q));
-  }, [searchText, allPdfs]);
+  }, [debouncedSearch, allPdfs]);
 
   const gridData = useMemo(() => {
     return activeCat === 'All'
@@ -128,7 +147,7 @@ export default function Index() {
       : allPdfs.filter(p => p.category === activeCat);
   }, [activeCat, allPdfs]);
 
-  const displayData = searchText ? searchResults : gridData;
+  const displayData = debouncedSearch ? searchResults : gridData;
 
   const renderHorizontal = ({ item }: RenderItemProps) => (
     <View style={{ marginRight: 12 }}>
@@ -152,7 +171,7 @@ export default function Index() {
 
   const ListHeader = () => (
     <>
-      {!searchText && (
+      {!debouncedSearch && (
         <>
           <Text className="text-white font-bold mt-4 mb-5 px-2" style={{ fontSize: 19 }}>
             Recently Uploaded PDFs
@@ -197,9 +216,9 @@ export default function Index() {
         </>
       )}
 
-      {searchText && (
+      {debouncedSearch && (
         <Text className="text-white text-lg font-bold mt-4 mb-4 px-2">
-          Search results for {searchText}
+          Search results for "{debouncedSearch}"
         </Text>
       )}
     </>
@@ -218,7 +237,7 @@ export default function Index() {
       </View>
 
       {loading && (
-        <Text className="text-center text-white mb-4">Loading...</Text>
+        <PDFGridSkeleton count={9} />
       )}
 
       <FlatList
@@ -231,20 +250,24 @@ export default function Index() {
         contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 16 }}
         ListHeaderComponent={<ListHeader />}
         ListEmptyComponent={
-          searchText ? (
-            <Text className="text-center text-white mt-10">
-              No PDFs match {searchText}.
-            </Text>
+          !loading && debouncedSearch ? (
+            <EmptyState
+              type="search"
+              searchQuery={debouncedSearch}
+              message="Try a different search term"
+            />
+          ) : !loading && displayData.length === 0 ? (
+            <EmptyState type="pdf" />
           ) : null
         }
         ListFooterComponent={
           loadingMore ? (
             <Text className="text-center text-gray-400 py-4">Loading more...</Text>
-          ) : currentPage < totalPages && !searchText ? (
+          ) : currentPage < totalPages && !debouncedSearch ? (
             <Text className="text-center text-gray-500 py-4">Scroll for more</Text>
           ) : null
         }
-        onEndReached={searchText ? undefined : loadMorePdfs}
+        onEndReached={debouncedSearch ? undefined : loadMorePdfs}
         onEndReachedThreshold={0.5}
         refreshControl={
           <RefreshControl
@@ -254,6 +277,16 @@ export default function Index() {
             colors={['#5B5FEF']}
           />
         }
+        // Performance optimizations
+        initialNumToRender={12}
+        maxToRenderPerBatch={15}
+        windowSize={5}
+        removeClippedSubviews={true}
+        getItemLayout={(data, index) => ({
+          length: 180, // Approximate height of each row (card + margin)
+          offset: 180 * Math.floor(index / 3),
+          index,
+        })}
       />
     </View>
   );
