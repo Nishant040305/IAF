@@ -8,6 +8,7 @@
 
 const { verifyToken } = require('../services/jwt.service');
 const response = require('../utils/response');
+const User = require('../models/User');
 
 /**
  * Authenticates a user via JWT token.
@@ -17,7 +18,7 @@ const response = require('../utils/response');
  * @param {Object} res - Express response
  * @param {Function} next - Next middleware
  */
-const authenticateUser = (req, res, next) => {
+const authenticateUser = async (req, res, next) => {
     try {
         let token;
 
@@ -41,9 +42,21 @@ const authenticateUser = (req, res, next) => {
             return response.unauthorized(res, 'Invalid token type');
         }
 
-        // Attach user info to request
+        // Check if user is blocked or deleted
+        const user = await User.findById(decoded.userId).select('isBlocked');
+        if (!user) {
+            return response.unauthorized(res, 'User no longer exists');
+        }
+        if (user.isBlocked) {
+            return response.unauthorized(res, 'User is blocked');
+        }
+
+        // Attach user info to request (includes userId, phone_number, deviceId, name)
         req.user = {
-            userId: decoded.userId
+            userId: decoded.userId,
+            phone_number: decoded.phone_number,
+            deviceId: decoded.deviceId,
+            name: decoded.name
         };
 
         next();
@@ -51,6 +64,7 @@ const authenticateUser = (req, res, next) => {
         if (error.name === 'TokenExpiredError') {
             return response.unauthorized(res, 'Token expired');
         }
+        // Handle database errors or invalid token errors
         return response.unauthorized(res, 'Invalid token');
     }
 };
@@ -83,7 +97,12 @@ const optionalAuth = (req, res, next) => {
         const decoded = verifyToken(token);
 
         if (decoded.type === 'user') {
-            req.user = { userId: decoded.userId };
+            req.user = {
+                userId: decoded.userId,
+                phone_number: decoded.phone_number,
+                deviceId: decoded.deviceId,
+                name: decoded.name
+            };
         } else if (decoded.type === 'admin') {
             req.admin = decoded;
         }

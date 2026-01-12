@@ -33,11 +33,35 @@ const userSchema = new mongoose.Schema(
         },
 
         /**
-         * Unique identifier for the device (locked for authentication).
+         * Current device ID bound to this user.
          */
         deviceId: {
             type: String,
+            trim: true,
+            index: true
+        },
+
+        /**
+         * Previous device ID (stored when device changes for audit trail).
+         */
+        previousDeviceId: {
+            type: String,
             trim: true
+        },
+
+        /**
+         * Last login timestamp.
+         */
+        lastLogin: {
+            type: Date
+        },
+
+        /**
+         * Whether the user is blocked from logging in.
+         */
+        isBlocked: {
+            type: Boolean,
+            default: false
         }
     },
     {

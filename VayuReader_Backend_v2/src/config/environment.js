@@ -57,15 +57,35 @@ const server = {
 /**
  * Database configuration
  */
+
+// Determine TLS setting: manual override takes priority, then auto-detect for production
+const getTlsSetting = () => {
+    // Manual override via environment variable
+    if (process.env.MONGODB_TLS === 'true') return true;
+    if (process.env.MONGODB_TLS === 'false') return false;
+
+    // Auto-detect: Enable TLS in production for non-local, non-SRV connections
+    // MongoDB Atlas SRV connections (mongodb+srv://) handle TLS automatically
+    const uri = process.env.MONGODB_URI || '';
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isLocalhost = uri.includes('localhost') || uri.includes('127.0.0.1');
+    const isSRV = uri.startsWith('mongodb+srv://');
+
+    // Only explicitly set TLS for standard (non-SRV) connections in production to remote hosts
+    if (isProduction && !isLocalhost && !isSRV) {
+        return true;
+    }
+
+    // For SRV connections or local connections, let MongoDB driver handle TLS
+    return undefined;
+};
+
 const database = {
     uri: process.env.MONGODB_URI,
     options: {
-        // Use TLS in production, unless explicitly disabled or running on localhost
-        tls: process.env.MONGODB_TLS !== 'false' && (
-            process.env.MONGODB_TLS === 'true' ||
-            (process.env.NODE_ENV === 'production' && !process.env.MONGODB_URI.includes('localhost') && !process.env.MONGODB_URI.includes('127.0.0.1') && !process.env.MONGODB_URI.includes('mongo'))
-        ),
-        serverSelectionTimeoutMS: 5000,
+        // TLS setting: manual override > auto-detect > driver default
+        ...(getTlsSetting() !== undefined ? { tls: getTlsSetting() } : {}),
+        serverSelectionTimeoutMS: 10000,  // Increased for cloud deployments
         socketTimeoutMS: 45000,
         // Connection pool settings
         maxPoolSize: parseInt(process.env.MONGODB_MAX_POOL_SIZE || '50', 10),

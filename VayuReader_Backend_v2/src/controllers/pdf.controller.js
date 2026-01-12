@@ -11,6 +11,7 @@ const fs = require('fs').promises;
 const PdfDocument = require('../models/PdfDocument');
 const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services/audit.service');
 const { publishPdfEvent, PDF_EVENTS } = require('../services/pubsub.service');
+const { logPdfRead } = require('../services/userAudit.service');
 const response = require('../utils/response');
 const { escapeRegex } = require('../utils/sanitize');
 
@@ -146,6 +147,15 @@ const getPdfById = async (req, res, next) => {
             return response.notFound(res, 'PDF not found');
         }
 
+        // Log PDF read event for authenticated users (all details from JWT)
+        if (req.user && req.user.userId) {
+            logPdfRead(
+                { userId: req.user.userId, phone_number: req.user.phone_number },
+                req.user.deviceId,
+                { pdfId: pdf._id.toString(), title: pdf.title }
+            );
+        }
+
         response.success(res, pdf);
     } catch (error) {
         next(error);
@@ -198,6 +208,9 @@ const uploadPdf = async (req, res, next) => {
             createdAt: newDoc.createdAt
         });
 
+        // Invalidate categories cache
+        await redisClient.del('pdf:categories');
+
         response.created(res, newDoc, 'PDF uploaded successfully');
     } catch (error) {
         next(error);
@@ -249,6 +262,9 @@ const updatePdf = async (req, res, next) => {
             category: updated.category,
             updatedAt: updated.updatedAt
         });
+
+        // Invalidate categories cache
+        await redisClient.del('pdf:categories');
 
         response.success(res, updated, 'PDF updated successfully');
     } catch (error) {
@@ -316,6 +332,9 @@ const deletePdf = async (req, res, next) => {
             id: req.params.id,
             title: pdf.title
         });
+
+        // Invalidate categories cache
+        await redisClient.del('pdf:categories');
 
         response.success(res, null, 'PDF deleted successfully');
     } catch (error) {

@@ -1,6 +1,7 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import api from '../utils/api';
+import { useDebouncedCallback } from '../utils/useDebounce';
 import {
   validateFile,
   validateDictionaryData,
@@ -29,7 +30,8 @@ const CancelIcon = () => (
 export default function DictionaryUploader() {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // For actions
+  const [isFetching, setIsFetching] = useState(false); // For data fetching
 
   // Single entry form
   const [newWord, setNewWord] = useState('');
@@ -45,9 +47,10 @@ export default function DictionaryUploader() {
 
   // Search & Display with server-side pagination
   const [allWords, setAllWords] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [activeSearch, setActiveSearch] = useState(''); // State for the committed search term
   const [searchResults, setSearchResults] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const searchInputRef = useRef(null); // Ref for input element
   const [totalPages, setTotalPages] = useState(1);
   const [totalWords, setTotalWords] = useState(0);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -62,15 +65,27 @@ export default function DictionaryUploader() {
   const csvInputRef = useRef();
   const jsonInputRef = useRef();
 
+  // Debounced handler for input changes
+  const handleSearchChange = useDebouncedCallback((value) => {
+    setActiveSearch(value);
+    setCurrentPage(1);
+    if (value.trim()) {
+      searchWords(value);
+    } else {
+      setSearchResults([]);
+      fetchWords(1, pageSize);
+    }
+  }, 300);
+
   const showMessage = (msg, type = 'info') => {
     setMessage(msg);
     setMessageType(type);
   };
 
   // Fetch words with pagination
-  const fetchWords = async (page = 1, limit = pageSize) => {
+  const fetchWords = useCallback(async (page = 1, limit = DEFAULT_PAGE_SIZE) => {
     try {
-      setLoading(true);
+      setIsFetching(true);
       const res = await api.get(`/api/dictionary/words/all?page=${page}&limit=${limit}`);
       const data = res.data.data;
       // Handle paginated response
@@ -86,13 +101,32 @@ export default function DictionaryUploader() {
     } catch (error) {
       showMessage('Failed to load words', 'error');
     } finally {
-      setLoading(false);
+      setIsFetching(false);
     }
-  };
+  }, []);
 
+  // Search words via API
+  const searchWords = useCallback(async (term) => {
+    if (!term.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    try {
+      setIsFetching(true);
+      const res = await api.get(`/api/dictionary/search/${encodeURIComponent(term)}`);
+      const data = res.data.data;
+      setSearchResults(Array.isArray(data) ? data : (data.words || []));
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setIsFetching(false);
+    }
+  }, []);
+
+  // Initial load and page size change
   useEffect(() => {
     fetchWords(1, pageSize);
-  }, [pageSize]);
+  }, [pageSize, fetchWords]);
 
   const handleAddSingle = async () => {
     const word = sanitizeString(newWord.trim().toUpperCase());
@@ -276,17 +310,6 @@ export default function DictionaryUploader() {
     }
   };
 
-  const handleSearch = () => {
-    if (!searchTerm.trim()) return;
-    api.get(`/api/dictionary/search/${searchTerm}`)
-      .then(res => {
-        const data = res.data.data;
-        setSearchResults(Array.isArray(data) ? data : (data.words || []));
-      })
-      .catch(() => setSearchResults([]));
-    setCurrentPage(1);
-  };
-
   const handleEdit = (wordData) => {
     setEditingId(wordData._id);
     setEditWord(wordData.word);
@@ -342,10 +365,10 @@ export default function DictionaryUploader() {
   };
 
   // Use searchResults if searching, otherwise show all words
-  const displayWords = searchTerm.trim() ? searchResults : allWords;
+  const displayWords = activeSearch.trim() ? searchResults : allWords;
   // For search, use client-side pagination; for all words, server already paginated
-  const displayTotalPages = searchTerm.trim() ? Math.ceil(searchResults.length / pageSize) || 1 : totalPages;
-  const paginatedResults = searchTerm.trim()
+  const displayTotalPages = activeSearch.trim() ? Math.ceil(searchResults.length / pageSize) || 1 : totalPages;
+  const paginatedResults = activeSearch.trim()
     ? displayWords.slice((currentPage - 1) * pageSize, currentPage * pageSize)
     : displayWords; // Server already paginated
 
@@ -439,9 +462,13 @@ export default function DictionaryUploader() {
       {/* Search */}
       <div style={styles.card}>
         <h3 style={styles.cardTitle}>Search Dictionary</h3>
-        <div style={styles.row}>
-          <input placeholder="Enter word..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ ...styles.input, flex: 1 }} />
-          <button style={styles.primaryBtn} onClick={handleSearch}>Search</button>
+        <div style={{ ...styles.row, position: 'relative' }}>
+          <input
+            placeholder="Start typing to search..."
+            ref={searchInputRef}
+            onChange={e => handleSearchChange(e.target.value)}
+            style={{ ...styles.input, flex: 1 }}
+          />
         </div>
 
         <table style={styles.table}>
@@ -456,7 +483,7 @@ export default function DictionaryUploader() {
           </thead>
           <tbody>
             {paginatedResults.length === 0 ? (
-              <tr><td colSpan={5} style={styles.emptyCell}>No results found. Try searching.</td></tr>
+              <tr><td colSpan={5} style={styles.emptyCell}>{isFetching ? 'Searching...' : 'No results found. Try searching.'}</td></tr>
             ) : paginatedResults.map((wordData, idx) => (
               <tr key={wordData._id} style={idx % 2 === 0 ? styles.zebra : {}}>
                 <td style={styles.td}>
@@ -493,18 +520,18 @@ export default function DictionaryUploader() {
         <Pagination
           currentPage={currentPage}
           totalPages={displayTotalPages}
-          totalItems={searchTerm.trim() ? searchResults.length : totalWords}
+          totalItems={activeSearch.trim() ? searchResults.length : totalWords}
           pageSize={pageSize}
           onPageChange={(page) => {
             setCurrentPage(page);
-            if (!searchTerm.trim()) fetchWords(page, pageSize);
+            if (!activeSearch.trim()) fetchWords(page, pageSize);
           }}
           onPageSizeChange={(size) => {
             setPageSize(size);
             setCurrentPage(1);
           }}
           pageSizeOptions={PAGE_SIZE_OPTIONS}
-          loading={loading}
+          loading={isFetching}
         />
       </div>
     </div>
@@ -548,4 +575,14 @@ const styles = {
   cancelBtn: { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #fecaca', color: '#dc2626', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
   pagination: { display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 16 },
   pageBtn: { background: '#e2e8f0', border: 'none', padding: '8px 16px', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
+  loadingText: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: '#64748b',
+    fontSize: '0.85rem',
+    fontStyle: 'italic',
+    pointerEvents: 'none'
+  },
 };

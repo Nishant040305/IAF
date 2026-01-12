@@ -1,11 +1,14 @@
 import { Link } from 'expo-router';
 import React from 'react';
 import { Image, Text, TouchableOpacity, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 import { PDF_BASE_URL } from '@/constants/config';
 
-const PDFCard = ({ _id, title, createdAt, thumbnail, cardWidth, category }: PDF & { cardWidth?: number }) => {
-  const thumbnailUri = thumbnail ? { uri: `${PDF_BASE_URL}${thumbnail}` } : 'https://placehold.co/600x800';
+const PDFCard = React.memo(({ _id, title, createdAt, thumbnail, cardWidth, category }: PDF & { cardWidth?: number }) => {
+  const thumbnailUri = thumbnail
+    ? { uri: `${PDF_BASE_URL}${thumbnail}` }
+    : { uri: 'https://placehold.co/600x800' };
 
   return (
     <Link
@@ -15,6 +18,7 @@ const PDFCard = ({ _id, title, createdAt, thumbnail, cardWidth, category }: PDF 
       <TouchableOpacity
         className="mx-1"
         style={{ width: cardWidth ?? "30%" }}
+        onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
       >
         <Image
           source={thumbnailUri}
@@ -42,6 +46,8 @@ const PDFCard = ({ _id, title, createdAt, thumbnail, cardWidth, category }: PDF 
       </TouchableOpacity>
     </Link>
   );
-};
+});
+
+PDFCard.displayName = 'PDFCard';
 
 export default PDFCard;

@@ -7,10 +7,7 @@ This guide covers both the **Mobile App** and the **Admin Dashboard**.
 ### Environment Setup (`.env`)
 In `VayuReader_Frontend/.env`:
 ```env
-EXPO_PUBLIC_AUTH_BASE_URL=https://localhost
-EXPO_PUBLIC_PDF_BASE_URL=https://localhost
-EXPO_PUBLIC_DICT_BASE_URL=https://localhost
-EXPO_PUBLIC_ABBR_BASE_URL=https://localhost
+EXPO_PUBLIC_BACKEND_URL=https://localhost
 ```
 
 ### Running the App

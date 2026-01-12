@@ -13,6 +13,7 @@ const { escapeRegex, createExactMatchRegex } = require('../utils/sanitize');
 
 const { redisClient } = require('../config/redis');
 const { invalidateWord, invalidateAllDictionaryCaches } = require('../services/cache.service');
+const { searchWords: esSearchWords, indexWord, deleteWord: deleteWordFromES } = require('../services/search.service');
 
 /**
  * Look up a word and get related words.
@@ -137,7 +138,7 @@ const getAllWords = async (req, res, next) => {
 };
 
 /**
- * Search words.
+ * Search words using Elasticsearch with MongoDB fallback.
  * Cached in Redis for 30 minutes.
  */
 const searchWords = async (req, res, next) => {
@@ -157,15 +158,19 @@ const searchWords = async (req, res, next) => {
             return response.success(res, JSON.parse(cachedData));
         }
 
-        const safeSearch = escapeRegex(searchTerm);
+        // Try Elasticsearch first
+        let results = await esSearchWords(searchTerm, 50);
 
-        // search in word field (primary)
-        const results = await Word.find({
-            word: { $regex: safeSearch, $options: 'i' }
-        })
-            .limit(50)
-            .select('word meanings synonyms antonyms')
-            .lean();
+        // Fallback to MongoDB if ES unavailable
+        if (results === null) {
+            const safeSearch = escapeRegex(searchTerm);
+            results = await Word.find({
+                word: { $regex: safeSearch, $options: 'i' }
+            })
+                .limit(50)
+                .select('word meanings synonyms antonyms')
+                .lean();
+        }
 
         // Cache search results for 30 minutes
         await redisClient.set(cacheKey, JSON.stringify(results), { EX: 1800 });
@@ -213,8 +218,9 @@ const createWord = async (req, res, next) => {
             word: newWord.word
         });
 
-        // Invalidate cache
+        // Invalidate cache and sync to Elasticsearch
         await invalidateWord(newWord.word);
+        indexWord(newWord).catch(err => console.error('[ES] Index word failed:', err.message));
 
         response.created(res, newWord, 'Word added successfully');
     } catch (error) {
@@ -269,6 +275,9 @@ const updateWord = async (req, res, next) => {
             await invalidateWord(updated.word);
         }
 
+        // Sync to Elasticsearch
+        indexWord(updated).catch(err => console.error('[ES] Index word failed:', err.message));
+
         response.success(res, updated, 'Word updated successfully');
     } catch (error) {
         next(error);
@@ -292,8 +301,9 @@ const deleteWord = async (req, res, next) => {
             word: word.word
         });
 
-        // Invalidate cache
+        // Invalidate cache and remove from Elasticsearch
         await invalidateWord(word.word);
+        deleteWordFromES(req.params.id).catch(err => console.error('[ES] Delete word failed:', err.message));
 
         response.success(res, null, 'Word deleted successfully');
     } catch (error) {
