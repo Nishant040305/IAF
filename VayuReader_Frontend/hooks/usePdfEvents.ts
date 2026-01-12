@@ -59,6 +59,8 @@ export const usePdfEvents = (
                     headers: {
                         'Accept': 'text/event-stream',
                     },
+                    // Explicitly set line ending character for proper SSE parsing
+                    lineEndingCharacter: '\n',
                 });
                 eventSourceRef.current = es;
 
@@ -71,8 +73,10 @@ export const usePdfEvents = (
                 // Handle 'connected' event
                 es.addEventListener('connected', (event) => {
                     if (!isMounted) return;
+                    console.log('[SSE] Received connected event, raw data:', event.data);
                     try {
                         const data = event.data ? JSON.parse(event.data) : {};
+                        console.log('[SSE] Parsed connected data:', data);
                         onEvent({ type: 'connected', data });
                     } catch (e) {
                         console.error('[SSE] Failed to parse connected event', e);
