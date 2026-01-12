@@ -17,6 +17,7 @@ import { PDF_BASE_URL } from '@/constants/config';
 import { icons } from "@/constants/icons";
 import { images } from "@/constants/images";
 import apiClient from '@/lib/apiClient';
+import { usePdfEvents, PdfEvent } from '@/hooks/usePdfEvents';
 
 type RenderItemProps = { item: PDF };
 type RenderCategoryItemProps = { item: string };
@@ -36,7 +37,7 @@ export default function Index() {
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const PAGE_SIZE = 50;
 
-  const fetchPdfs = async (page: number = 1, isRefresh: boolean = false) => {
+  const fetchPdfs = useCallback(async (page: number = 1, isRefresh: boolean = false) => {
     try {
       if (page === 1) {
         setLoading(true);
@@ -75,7 +76,46 @@ export default function Index() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  };
+  }, []);
+
+  // SSE Event Handler - Real-time PDF updates
+  const handlePdfEvent = useCallback((event: PdfEvent) => {
+    console.log('[SSE] Received event:', event.type, event.data);
+
+    switch (event.type) {
+      case 'PDF_ADDED':
+        // Add the new PDF directly to the top of the list (no re-fetch needed)
+        const newPdf: PDF = {
+          _id: event.data._id || event.data.id,
+          title: event.data.title || 'Untitled',
+          category: event.data.category || 'General',
+          pdfUrl: event.data.pdfUrl || '',
+          thumbnail: event.data.thumbnail,
+          viewCount: event.data.viewCount || 0,
+          createdAt: event.data.createdAt || new Date().toISOString(),
+        };
+        setAllPdfs(prev => [newPdf, ...prev]);
+        break;
+      case 'PDF_UPDATED':
+        // Update the specific PDF in the list
+        setAllPdfs(prev => prev.map(pdf =>
+          pdf._id === event.data.id
+            ? { ...pdf, title: event.data.title || pdf.title, category: event.data.category || pdf.category }
+            : pdf
+        ));
+        break;
+      case 'PDF_DELETED':
+        // Remove the PDF from the list
+        setAllPdfs(prev => prev.filter(pdf => pdf._id !== event.data.id));
+        break;
+      case 'connected':
+        console.log('[SSE] Connected to real-time updates');
+        break;
+    }
+  }, [fetchPdfs]);
+
+  // Subscribe to SSE events for real-time updates
+  usePdfEvents(handlePdfEvent, [handlePdfEvent]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -103,7 +143,7 @@ export default function Index() {
 
   useEffect(() => {
     fetchPdfs(1);
-  }, []);
+  }, [fetchPdfs]);
 
   const recentData = useMemo(
     () =>

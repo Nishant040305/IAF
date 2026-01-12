@@ -200,11 +200,16 @@ const uploadPdf = async (req, res, next) => {
             category: newDoc.category
         });
 
-        // Publish real-time event
+        // Publish real-time event with complete PDF data
         await publishPdfEvent(PDF_EVENTS.ADDED, {
             id: newDoc._id.toString(),
+            _id: newDoc._id.toString(),
             title: newDoc.title,
+            content: newDoc.content,
             category: newDoc.category,
+            pdfUrl: newDoc.pdfUrl,
+            thumbnail: newDoc.thumbnail,
+            viewCount: newDoc.viewCount,
             createdAt: newDoc.createdAt
         });
 
