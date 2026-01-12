@@ -118,7 +118,7 @@ const verifyLoginOtp = async (req, res, next) => {
         const isTesting = process.env.TESTING === 'true';
         res.cookie('admin_token', token, {
             httpOnly: true,           // Prevents JavaScript access
-            secure: isProduction,     // HTTPS only in production
+            secure: isProduction || isTesting,  // HTTPS required for SameSite=none
             sameSite: isTesting ? 'none' : 'lax',       // CSRF protection
             maxAge: 24 * 60 * 60 * 1000, // 24 hours
             path: '/'
@@ -251,9 +251,11 @@ const getCurrentAdmin = async (req, res, next) => {
  * Logout admin by clearing the JWT cookie.
  */
 const logout = (req, res) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isTesting = process.env.TESTING === 'true';
     res.clearCookie('admin_token', {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: isProduction || isTesting,
         sameSite: isTesting ? 'none' : 'lax',
         path: '/'
     });

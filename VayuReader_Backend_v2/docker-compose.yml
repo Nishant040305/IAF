@@ -22,21 +22,19 @@ services:
       - MONGODB_TLS=false
       - REDIS_URL=redis://redis:6379
       - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - PORT=3000
+      - PORT=5000
       - ALLOWED_ORIGINS=http://localhost,https://localhost,http://localhost:3000,https://localhost:3000,http://localhost:3001,https://localhost:3001,http://127.0.0.1:3000,https://127.0.0.1:3000,https://localhost:5000,http://localhost:5000
       - OTP_GATEWAY_URL=http://sms-simulator:8000/smsc/sends
-      - TESTING=false
+      - TESTING=true
       - RATE_LIMIT_WINDOW_MS=900000
       - RATE_LIMIT_MAX_REQUESTS=100
       - OTP_RATE_LIMIT_MAX=5
     networks:
       - backend-network
-    ports:
-      - "3000:3000"
     volumes:
       - ./uploads:/usr/src/app/uploads
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3000/health" ]
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:5000/health" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -88,8 +86,6 @@ services:
     image: mongo:6-jammy
     container_name: vayureader_db
     restart: unless-stopped
-    ports:
-      - "27017:27017"
     volumes:
       - mongo-data:/data/db
     networks:
@@ -104,8 +100,6 @@ services:
     image: redis:alpine
     container_name: vayureader_cache
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     networks:
       - backend-network
 

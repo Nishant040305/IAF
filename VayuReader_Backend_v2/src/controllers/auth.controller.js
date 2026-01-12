@@ -182,7 +182,7 @@ const verifyLoginOtp = async (req, res, next) => {
 
         res.cookie('auth_token', token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: process.env.NODE_ENV === 'production' || isTesting,
             sameSite: isTesting ? 'none' : 'lax',
             maxAge: oneHundredYearsMs,
             path: '/'
@@ -208,7 +208,7 @@ const logout = async (req, res, next) => {
         const isTesting = process.env.TESTING === 'true';
         res.cookie('auth_token', '', {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: process.env.NODE_ENV === 'production' || isTesting,
             sameSite: isTesting ? 'none' : 'lax',
             maxAge: 0,
             path: '/'
