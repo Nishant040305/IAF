@@ -17,6 +17,8 @@ import {
 } from 'react-native';
 
 import SearchBar from '@/components/SearchBar';
+import { ListSkeleton } from '@/components/Skeleton';
+import EmptyState from '@/components/EmptyState';
 import { ABBR_BASE_URL } from '@/constants/config';
 import { icons } from '@/constants/icons';
 import { images } from '@/constants/images';
@@ -146,8 +148,8 @@ export default function AbbreviationScreen() {
     const q = searchText.trim().toLowerCase();
     if (!q) return abbreviations;
     return abbreviations.filter((item) =>
-      item.abbreviation.toLowerCase().includes(q) ||
-      item.fullForm.toLowerCase().includes(q)
+      (item.abbreviation?.toLowerCase() || '').includes(q) ||
+      (item.fullForm?.toLowerCase() || '').includes(q)
     );
   }, [searchText, abbreviations]);
 
@@ -175,9 +177,7 @@ export default function AbbreviationScreen() {
       </View>
 
       {loading && (
-        <View className="items-center justify-center my-4">
-          <ActivityIndicator size="large" color="#5B5FEF" />
-        </View>
+        <ListSkeleton count={8} />
       )}
 
       <FlatList
@@ -203,9 +203,11 @@ export default function AbbreviationScreen() {
         }}
         ListEmptyComponent={
           !loading ? (
-            <Text className="text-center text-gray-400 mt-10">
-              {searchText ? 'No match found.' : 'No data to display.'}
-            </Text>
+            <EmptyState
+              type="abbreviation"
+              searchQuery={searchText || undefined}
+              message={searchText ? 'Try a different abbreviation' : 'No abbreviations available'}
+            />
           ) : null
         }
         ListFooterComponent={
