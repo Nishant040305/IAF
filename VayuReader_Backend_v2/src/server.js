@@ -86,9 +86,19 @@ app.options('*', cors(corsOptions));
 // Cookie parser (for JWT in HTTP-only cookies)
 app.use(cookieParser());
 
-// Body parsing (limit configurable, default 100MB for large file uploads)
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+// Body parsing configuration (DoS Protection)
+// 1. Allow 100MB for specific bulk upload routes
+const bulkUploadRoutes = [
+    '/api/dictionary/upload',
+    '/api/abbreviations/bulk'
+];
+app.use(bulkUploadRoutes, express.json({ limit: '100mb' }));
+
+// 2. Enforce 1MB limit for all other JSON requests
+app.use(express.json({ limit: '1mb' }));
+
+// 3. standard URL-encoded limit
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Trim whitespace from string fields
 app.use(trimFields);
