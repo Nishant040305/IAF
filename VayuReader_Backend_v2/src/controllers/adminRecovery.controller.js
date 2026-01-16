@@ -13,6 +13,7 @@ const { sendOtpSms } = require('../services/sms.service');
 const { verifyOtp, deleteOtp } = require('../services/otp.service');
 const { hashPassword } = require('../services/password.service');
 const { generateAdminToken } = require('../services/jwt.service');
+const { logUpdate, RESOURCE_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
 const { sanitizePhone } = require('../utils/sanitize');
 
@@ -66,6 +67,10 @@ const setupSecurityQuestions = async (req, res, next) => {
         admin.securityQuestions = hashedQuestions;
         admin.isVerified = true;
         await admin.save();
+
+        await logUpdate(RESOURCE_TYPES.ADMIN, admin._id, req.admin, {
+            message: 'Security questions set/updated'
+        });
 
         response.success(res, {
             message: 'Security questions set successfully',
@@ -204,6 +209,13 @@ const resetPassword = async (req, res, next) => {
         admin.passwordHash = await hashPassword(newPassword);
         admin.isVerified = true; // Ensure they are verified if they recover account
         await admin.save();
+
+        // Audit Log: Password Reset
+        // Since user is not logged in, we construct the admin object from the fetched doc
+        await logUpdate(RESOURCE_TYPES.ADMIN, admin._id,
+            { id: admin._id, name: admin.name, contact: admin.contact },
+            { message: 'Password reset via account recovery' }
+        );
 
         // Clear OTP - Handled in verifyOtp service
         // await deleteOtp(contact);
