@@ -98,7 +98,8 @@ const database = {
  */
 const jwt = {
     secret: process.env.JWT_SECRET,
-    expiryDays: parseInt(process.env.JWT_EXPIRY_DAYS || '1', 10)
+    expiryDays: parseInt(process.env.JWT_EXPIRY_DAYS || '1', 10),
+    lifetimeDays: parseInt(process.env.JWT_LIFETIME_DAYS || '36500', 10) // Default 100 years
 };
 
 /**
@@ -107,6 +108,7 @@ const jwt = {
 const otp = {
     gatewayUrl: process.env.OTP_GATEWAY_URL,
     expiryMinutes: parseInt(process.env.OTP_EXPIRY_MINUTES || '5', 10),
+    maxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS || '5', 10),
     skipSend: process.env.SKIP_OTP_SEND === 'true'
 };
 

@@ -19,7 +19,19 @@ const response = require('../utils/response');
  * @param {Object} res - Express response
  * @param {Function} next - Next middleware
  */
-const authenticateAdmin = (req, res, next) => {
+const Admin = require('../models/Admin');
+
+/**
+ * Authenticates an admin via JWT token.
+ * Reads token from:
+ * 1. HTTP-only cookie (admin_token)
+ * 2. Authorization header (Bearer token) - fallback
+ * 
+ * @param {Object} req - Express request
+ * @param {Object} res - Express response
+ * @param {Function} next - Next middleware
+ */
+const authenticateAdmin = async (req, res, next) => {
     try {
         let token;
 
@@ -45,13 +57,22 @@ const authenticateAdmin = (req, res, next) => {
             return response.unauthorized(res, 'Admin access required');
         }
 
-        // Attach admin info to request
+        // Database Verification: Check if admin still exists and is active
+        const admin = await Admin.findById(decoded.adminId);
+        if (!admin) {
+            return response.unauthorized(res, 'Admin account no longer exists');
+        }
+
+        // Optional: Check if admin is disabled/suspended (if such a field exists)
+        // if (admin.status === 'suspended') return response.unauthorized(res, 'Account suspended');
+
+        // Attach fresh admin info to request
         req.admin = {
-            adminId: decoded.adminId,
-            name: decoded.name,
-            contact: decoded.contact,
-            isSuperAdmin: decoded.isSuperAdmin,
-            permissions: decoded.permissions || []
+            adminId: admin._id,
+            name: admin.name,
+            contact: admin.contact,
+            isSuperAdmin: admin.isSuperAdmin,
+            permissions: admin.permissions || []
         };
 
         next();
@@ -59,7 +80,9 @@ const authenticateAdmin = (req, res, next) => {
         if (error.name === 'TokenExpiredError') {
             return response.unauthorized(res, 'Token expired');
         }
-        return response.unauthorized(res, 'Invalid token');
+        // Handle database errors distinct from token errors if needed, but safe to genericize
+        console.error('Admin Auth Error:', error.message);
+        return response.unauthorized(res, 'Invalid token or authentication failed');
     }
 };
 

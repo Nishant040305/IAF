@@ -44,9 +44,9 @@ const generateLifetimeUserToken = (userId, additionalPayload = {}) => {
         ...additionalPayload
     };
 
-    // 100 years = 36500 days
+    // Use configurable lifetime from env
     return jwt.sign(payload, jwtConfig.secret, {
-        expiresIn: '36500d'
+        expiresIn: `${jwtConfig.lifetimeDays}d`
     });
 };
 

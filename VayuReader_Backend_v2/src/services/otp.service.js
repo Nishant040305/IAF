@@ -142,15 +142,45 @@ const verifyOtp = async (providedOtp, identifier, loginToken = '', providedDevic
         };
     }
 
+    // Check failed attempts
+    const failedAttempts = data.failedAttempts || 0;
+    if (failedAttempts >= otpConfig.maxAttempts) {
+        // Delete OTP if max attempts reached (security lockout)
+        await deleteOtp(identifier);
+        return {
+            valid: false,
+            error: 'Too many failed attempts. Please request a new OTP.'
+        };
+    }
+
     const decryptedOtp = decrypt(data.otp, loginToken);
 
     if (!decryptedOtp || String(providedOtp) !== String(decryptedOtp)) {
         console.warn(`[OTP] Mismatch for ${identifier}: provided=${providedOtp}`);
+
+        // Increment failed attempts
+        const newData = { ...data, failedAttempts: failedAttempts + 1 };
+        // Update Redis (keeping original TTL if possible, or reset to short window)
+        // Here we just update the record. Ideally, we should preserve the remaining TTL.
+        // For simplicity, we'll reset TTL to remaining time if we could calculate it, 
+        // but 'set' without specific options might overwrite. 
+        // Let's use KEEPTTL if available (Redis 6+), otherwise restart expiry.
+        // Node-redis 'set' with 'KEEPTTL' option:
+        const key = `${KEY_PREFIX}${identifier}`;
+        await redisClient.set(key, JSON.stringify(newData), { KEEPTTL: true });
+
         return {
             valid: false,
             error: 'Invalid OTP'
         };
     }
+
+    // Success - delete used OTP
+    // await deleteOtp(identifier); // Often handled by caller, but generally good to delete here if strictly one-time.
+    // However, keeping it might be necessary if we verify -> then use token. 
+    // The current flow suggests verifyOtp is just a check. 
+    // BUT the caller (adminRecovery.controller) deletes it manually after success resets password.
+    // So we don't delete here on success.
 
     return {
         valid: true,
