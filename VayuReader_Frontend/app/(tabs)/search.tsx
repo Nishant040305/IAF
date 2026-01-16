@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   BackHandler,
   FlatList,
   Image,
@@ -81,8 +82,17 @@ export default function DictionaryScreen() {
         setTotalPages(responseData.pagination.totalPages || 1);
         setCurrentPage(responseData.pagination.page || page);
       }
-    } catch (err) {
+    } catch (err: any) {
+      const endpoint = `${DICT_BASE_URL}/api/dictionary/words/all`;
+      const statusCode = err?.response?.status || 'No status';
+      const serverMessage = err?.response?.data?.message;
+      const errorMessage = err?.message;
+      const message = serverMessage || errorMessage || 'Failed to load dictionary.';
       console.error('Failed to fetch words', err);
+      Alert.alert(
+        'Failed to load dictionary',
+        `Error: ${message}\n\nEndpoint: ${endpoint}\nStatus: ${statusCode}\nTrace: ${errorMessage || 'No trace'}`
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -133,8 +143,17 @@ export default function DictionaryScreen() {
         const words: WordObj[] = res.data.data;
         const filtered = filterValidWords(words);
         setData(filtered);
-      } catch (err) {
+      } catch (err: any) {
+        const endpoint = `${DICT_BASE_URL}/api/dictionary/search/${q}`;
+        const statusCode = err?.response?.status || 'No status';
+        const serverMessage = err?.response?.data?.message;
+        const errorMessage = err?.message;
+        const message = serverMessage || errorMessage || 'Search failed.';
         setData([]);
+        Alert.alert(
+          'Search failed',
+          `Error: ${message}\n\nEndpoint: ${endpoint}\nStatus: ${statusCode}\nTrace: ${errorMessage || 'No trace'}`
+        );
       } finally {
         setLoading(false);
         setRefreshing(false);

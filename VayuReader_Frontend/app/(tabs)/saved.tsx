@@ -74,8 +74,16 @@ export default function AbbreviationScreen() {
         setTotalPages(data.pagination.totalPages || 1);
         setCurrentPage(data.pagination.page || page);
       }
-    } catch (err) {
-      Alert.alert('Error', 'Failed to load abbreviations.');
+    } catch (err: any) {
+      const endpoint = `${ABBR_BASE_URL}/api/abbreviations/all`;
+      const statusCode = err?.response?.status || 'No status';
+      const serverMessage = err?.response?.data?.message;
+      const errorMessage = err?.message;
+      const message = serverMessage || errorMessage || 'Failed to load abbreviations.';
+      Alert.alert(
+        'Failed to load abbreviations',
+        `Error: ${message}\n\nEndpoint: ${endpoint}\nStatus: ${statusCode}\nTrace: ${errorMessage || 'No trace'}`
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
