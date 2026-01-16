@@ -13,7 +13,7 @@ const { sendOtpSms } = require('../services/sms.service');
 const { hashPassword, comparePassword } = require('../services/password.service');
 const { logAction, RESOURCE_TYPES, ACTION_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
-const { sanitizePhone, sanitizeName } = require('../utils/sanitize');
+const { sanitizePhone, sanitizeName, escapeRegex } = require('../utils/sanitize');
 
 // =============================================================================
 // AUTHENTICATION (Password + OTP 2FA with Login Token)
@@ -204,6 +204,49 @@ const createSubAdmin = async (req, res, next) => {
 };
 
 /**
+ * Update a sub-admin's permissions.
+ */
+const updateSubAdmin = async (req, res, next) => {
+    try {
+        const { permissions } = req.body;
+        const admin = await Admin.findById(req.params.id);
+
+        if (!admin) {
+            return response.notFound(res, 'Sub-admin not found');
+        }
+
+        if (admin.isSuperAdmin) {
+            return response.forbidden(res, 'Cannot modify super admin permissions');
+        }
+
+        // Validate permissions
+        const validPermissions = permissions && Array.isArray(permissions)
+            ? permissions.filter(p => Admin.PERMISSIONS.includes(p))
+            : [];
+
+        const oldPermissions = admin.permissions;
+        admin.permissions = validPermissions;
+        await admin.save();
+
+        await logAction(
+            ACTION_TYPES.UPDATE,
+            RESOURCE_TYPES.ADMIN,
+            admin._id,
+            req.admin,
+            {
+                name: admin.name,
+                oldPermissions,
+                newPermissions: validPermissions
+            }
+        );
+
+        response.success(res, admin.toSafeObject(), 'Sub-admin updated successfully');
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Delete a sub-admin.
  */
 const deleteSubAdmin = async (req, res, next) => {
@@ -229,6 +272,111 @@ const deleteSubAdmin = async (req, res, next) => {
         );
 
         response.success(res, null, 'Sub-admin deleted successfully');
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get a single sub-admin by ID.
+ */
+const getSubAdminById = async (req, res, next) => {
+    try {
+        const admin = await Admin.findById(req.params.id);
+
+        if (!admin) {
+            return response.notFound(res, 'Sub-admin not found');
+        }
+
+        response.success(res, admin.toSafeObject());
+    } catch (error) {
+        next(error);
+    }
+};
+
+// =============================================================================
+// USER MANAGEMENT (Admin creates users)
+// =============================================================================
+
+/**
+ * Create a new user (admin pre-registration).
+ * User will need to set security questions on first login.
+ */
+const createUser = async (req, res, next) => {
+    try {
+        const User = require('../models/User');
+        const { name, phone_number } = req.body;
+        const normalizedPhone = sanitizePhone(phone_number);
+
+        if (!normalizedPhone) {
+            return response.badRequest(res, 'Valid phone number is required');
+        }
+
+        // Check for existing user
+        const existing = await User.findOne({ phone_number: normalizedPhone });
+        if (existing) {
+            return response.conflict(res, 'User with this phone number already exists');
+        }
+
+        const newUser = new User({
+            name: sanitizeName(name),
+            phone_number: normalizedPhone,
+            isVerified: false, // Must set security questions before full auth
+            createdByAdmin: req.admin.adminId
+        });
+
+        await newUser.save();
+
+        response.created(res, {
+            id: newUser._id,
+            name: newUser.name,
+            phone_number: newUser.phone_number,
+            isVerified: newUser.isVerified
+        }, 'User created successfully. User must set security questions on first login.');
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get all users (paginated).
+ */
+const getAllUsers = async (req, res, next) => {
+    try {
+        const User = require('../models/User');
+        const { page = 1, limit = 50, search } = req.query;
+
+        const filter = {};
+        if (search) {
+            const safeSearch = escapeRegex(search);
+            filter.$or = [
+                { name: { $regex: safeSearch, $options: 'i' } },
+                { phone_number: { $regex: safeSearch, $options: 'i' } }
+            ];
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const limitNum = Math.min(parseInt(limit), 100);
+
+        const [users, total] = await Promise.all([
+            User.find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .select('-securityQuestions')
+                .lean(),
+            User.countDocuments(filter)
+        ]);
+
+        response.success(res, {
+            users,
+            pagination: {
+                page: parseInt(page),
+                limit: limitNum,
+                total,
+                pages: Math.ceil(total / limitNum)
+            }
+        });
     } catch (error) {
         next(error);
     }
@@ -269,5 +417,10 @@ module.exports = {
     getCurrentAdmin,
     getAllSubAdmins,
     createSubAdmin,
-    deleteSubAdmin
+    updateSubAdmin,
+    deleteSubAdmin,
+    getSubAdminById,
+    createUser,
+    getAllUsers
 };
+

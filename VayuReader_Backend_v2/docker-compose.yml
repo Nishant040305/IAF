@@ -27,7 +27,7 @@ services:
       - OTP_GATEWAY_URL=http://sms-simulator:8000/smsc/sends
       - TESTING=true
       - RATE_LIMIT_WINDOW_MS=900000
-      - RATE_LIMIT_MAX_REQUESTS=100
+      - RATE_LIMIT_MAX_REQUESTS=200
       - OTP_RATE_LIMIT_MAX=5
     networks:
       - backend-network

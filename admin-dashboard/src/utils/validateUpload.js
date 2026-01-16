@@ -3,8 +3,8 @@
  * Provides security checks for CSV and JSON file uploads
  */
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const MAX_ENTRIES = 10000;
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB (matches backend)
+const MAX_ENTRIES = Infinity; // No limit on entries
 
 // Dangerous patterns to strip
 const DANGEROUS_PATTERNS = [

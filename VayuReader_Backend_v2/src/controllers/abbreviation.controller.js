@@ -13,7 +13,7 @@ const { escapeRegex, createExactMatchRegex } = require('../utils/sanitize');
 
 const { redisClient } = require('../config/redis');
 const { invalidateAbbreviation, invalidateAllAbbreviationCaches } = require('../services/cache.service');
-const { searchAbbreviations: esSearchAbbreviations, indexAbbreviation, deleteAbbreviation: deleteAbbrFromES } = require('../services/search.service');
+const { searchAbbreviations: esSearchAbbreviations, indexAbbreviation, deleteAbbreviation: deleteAbbrFromES, bulkIndexAbbreviations } = require('../services/search.service');
 
 // Cache TTL constants (in seconds)
 const CACHE_TTL = {
@@ -279,6 +279,16 @@ const bulkUpload = async (req, res, next) => {
             message: 'Bulk upload abbreviations'
         });
 
+        // Sync to Elasticsearch
+        try {
+            if (result.length > 0) {
+                await bulkIndexAbbreviations(result);
+                console.log(`[ES] Indexed ${result.length} abbreviations`);
+            }
+        } catch (esError) {
+            console.error('[ES] Bulk index abbreviations failed:', esError.message);
+        }
+
         // Invalidate all abbreviation caches after bulk upload
         await invalidateAllAbbreviationCaches();
 
@@ -287,6 +297,13 @@ const bulkUpload = async (req, res, next) => {
         if (error.code === 11000) {
             // Handle duplicate keys gracefully
             const insertedCount = error.result?.insertedIds?.length || 0;
+
+            await logCreate(RESOURCE_TYPES.ABBREVIATION, 'bulk-upload-partial', req.admin, {
+                count: insertedCount,
+                message: 'Bulk upload abbreviations (with duplicates)',
+                duplicatesSkipped: abbreviations.length - insertedCount
+            });
+
             // Still invalidate cache even for partial success
             await invalidateAllAbbreviationCaches();
             return response.success(res, { count: insertedCount }, `Uploaded ${insertedCount} abbreviations (duplicates skipped)`);

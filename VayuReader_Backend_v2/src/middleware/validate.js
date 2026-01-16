@@ -35,21 +35,24 @@ const requireFields = (fields) => (req, res, next) => {
 };
 
 /**
- * Validates that the :id parameter is a valid MongoDB ObjectId.
+ * Validates that a route parameter is a valid MongoDB ObjectId.
  * 
- * @param {Object} req - Express request
- * @param {Object} res - Express response
- * @param {Function} next - Next middleware
+ * @param {string} [paramName='id'] - The name of the route parameter to validate
+ * @returns {Function} Express middleware
+ * 
+ * @example
+ * router.get('/:id', validateObjectId(), handler); // validates req.params.id
+ * router.get('/user/:userId', validateObjectId('userId'), handler); // validates req.params.userId
  */
-const validateObjectId = (req, res, next) => {
-    const id = req.params.id;
+const validateObjectId = (paramName = 'id') => (req, res, next) => {
+    const id = req.params[paramName];
 
     if (!id) {
-        return response.badRequest(res, 'ID parameter is required');
+        return response.badRequest(res, `${paramName} parameter is required`);
     }
 
     if (!isValidObjectId(id)) {
-        return response.badRequest(res, 'Invalid ID format');
+        return response.badRequest(res, `Invalid ${paramName} format`);
     }
 
     next();

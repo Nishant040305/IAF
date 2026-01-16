@@ -74,6 +74,33 @@ async function main() {
         }
         console.log('[Sync] Elasticsearch connected');
 
+        // Check for clean/purge flags
+        const args = process.argv.slice(2);
+        const isClean = args.includes('--clean');
+        const isPurge = args.includes('--purge');
+
+        if (isClean || isPurge) {
+            console.log('[Sync] 🧹 Cleaning existing indices...');
+            try {
+                if (await esClient.indices.exists({ index: INDICES.WORDS })) {
+                    await esClient.indices.delete({ index: INDICES.WORDS });
+                    console.log(`[Sync] Deleted index: ${INDICES.WORDS}`);
+                }
+                if (await esClient.indices.exists({ index: INDICES.ABBREVIATIONS })) {
+                    await esClient.indices.delete({ index: INDICES.ABBREVIATIONS });
+                    console.log(`[Sync] Deleted index: ${INDICES.ABBREVIATIONS}`);
+                }
+            } catch (err) {
+                console.error('[Sync] Clean failed:', err.message);
+            }
+
+            if (isPurge) {
+                console.log('[Sync] 🗑️ Purge complete. Indices deleted. Exiting.');
+                await mongoose.disconnect();
+                process.exit(0);
+            }
+        }
+
         console.log('[Sync] Initializing ES indices...');
         await initializeIndices();
         console.log('[Sync] Indices ready');

@@ -9,7 +9,7 @@
 const path = require('path');
 const fs = require('fs').promises;
 const PdfDocument = require('../models/PdfDocument');
-const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services/audit.service');
+const { logCreate, logUpdate, logDelete, logRead, RESOURCE_TYPES } = require('../services/audit.service');
 const { publishPdfEvent, PDF_EVENTS } = require('../services/pubsub.service');
 const { logPdfRead } = require('../services/userAudit.service');
 const response = require('../utils/response');
@@ -137,11 +137,23 @@ const getCategories = async (req, res, next) => {
  */
 const getPdfById = async (req, res, next) => {
     try {
-        const pdf = await PdfDocument.findByIdAndUpdate(
-            req.params.id,
-            { $inc: { viewCount: 1 } },
-            { new: true }
-        );
+        let pdf;
+        console.log('getPdfById debug - ID:', req.params.id);
+        console.log('getPdfById debug - req.admin:', req.admin ? 'Yes' : 'No');
+        console.log('getPdfById debug - req.user:', req.user ? 'Yes' : 'No');
+        console.log('getPdfById debug - headers:', JSON.stringify(req.headers));
+
+        // If admin, just fetch without incrementing view count
+        if (req.admin) {
+            pdf = await PdfDocument.findById(req.params.id);
+        } else {
+            // If user (or public), increment view count
+            pdf = await PdfDocument.findByIdAndUpdate(
+                req.params.id,
+                { $inc: { viewCount: 1 } },
+                { new: true }
+            );
+        }
 
         if (!pdf) {
             return response.notFound(res, 'PDF not found');
@@ -154,6 +166,25 @@ const getPdfById = async (req, res, next) => {
                 req.user.deviceId,
                 { pdfId: pdf._id.toString(), title: pdf.title }
             );
+        }
+
+
+
+        response.success(res, pdf);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get single PDF for Admin (NO view count increment).
+ */
+const getAdminPdfById = async (req, res, next) => {
+    try {
+        const pdf = await PdfDocument.findById(req.params.id);
+
+        if (!pdf) {
+            return response.notFound(res, 'PDF not found');
         }
 
         response.success(res, pdf);
@@ -340,6 +371,7 @@ module.exports = {
     searchPdfs,
     getAllPdfs,
     getPdfById,
+    getAdminPdfById,
     uploadPdf,
     updatePdf,
     deletePdf,

@@ -32,14 +32,14 @@ const apiLimitConfig = {
         },
         login: {
             prefix: 'login',
-            windowMs: 60 * 1000, // 15 minutes
-            max: 5,
+            windowMs: 60 * 1000, // 1 minute
+            max: 20, // Increased for admin dashboard
             message: 'Too many login attempts, please try again later'
         },
         createAdmin: {
             prefix: 'create-admin',
             windowMs: 60 * 60 * 1000, // 1 hour
-            max: 5,
+            max: 50,
             message: 'Too many admin creation attempts'
         }
     },

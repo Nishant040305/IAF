@@ -32,6 +32,9 @@ const pdfRoutes = require('./routes/pdf.routes');
 const dictionaryRoutes = require('./routes/dictionary.routes');
 const abbreviationRoutes = require('./routes/abbreviation.routes');
 const sseRoutes = require('./routes/sse.routes');
+const userAuditRoutes = require('./routes/userAudit.routes');
+const recoveryRoutes = require('./routes/recovery.routes');
+const adminRecoveryRoutes = require('./routes/adminRecovery.routes');
 
 // =============================================================================
 // APP INITIALIZATION
@@ -83,9 +86,9 @@ app.options('*', cors(corsOptions));
 // Cookie parser (for JWT in HTTP-only cookies)
 app.use(cookieParser());
 
-// Body parsing
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Body parsing (limit configurable, default 100MB for large file uploads)
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // Trim whitespace from string fields
 app.use(trimFields);
@@ -126,6 +129,9 @@ app.use('/api/pdfs', pdfRoutes);
 app.use('/api/dictionary', dictionaryRoutes);
 app.use('/api/abbreviations', abbreviationRoutes);
 app.use('/api/events', sseRoutes);
+app.use('/api/user-audit', userAuditRoutes);
+app.use('/api/recovery', recoveryRoutes);
+app.use('/api/admin/recovery', adminRecoveryRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -141,7 +147,10 @@ app.get('/', (req, res) => {
             pdfs: '/api/pdfs',
             dictionary: '/api/dictionary',
             abbreviations: '/api/abbreviations',
-            events: '/api/events'
+            events: '/api/events',
+            userAudit: '/api/user-audit',
+            recovery: '/api/recovery',
+            adminRecovery: '/api/admin/recovery'
         }
     });
 });
@@ -186,6 +195,8 @@ const startServer = async () => {
             console.log('║    /api/pdfs         - PDF documents                   ║');
             console.log('║    /api/dictionary   - Dictionary words                ║');
             console.log('║    /api/abbreviations - Abbreviations                  ║');
+            console.log('║    /api/user-audit   - User audit logs                 ║');
+            console.log('║    /api/recovery     - Password recovery               ║');
             console.log('╚════════════════════════════════════════════════════════╝');
             console.log('');
         });

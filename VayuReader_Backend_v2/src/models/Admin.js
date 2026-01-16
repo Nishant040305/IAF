@@ -17,7 +17,8 @@ const PERMISSIONS = [
     'manage_dictionary',
     'manage_abbreviations',
     'manage_admins',
-    'view_audit'
+    'view_audit',
+    'view_user_audit'
 ];
 
 const adminSchema = new mongoose.Schema(
@@ -78,7 +79,25 @@ const adminSchema = new mongoose.Schema(
         passwordHash: {
             type: String,
             required: [true, 'Password is required']
-        }
+        },
+
+        /**
+         * Whether admin has completed security question setup.
+         * New admins must set security questions before accessing resources.
+         */
+        isVerified: {
+            type: Boolean,
+            default: false
+        },
+
+        /**
+         * Security questions for password recovery.
+         * Answers are hashed for security.
+         */
+        securityQuestions: [{
+            question: { type: String, required: true },
+            answerHash: { type: String, required: true }
+        }]
     },
     {
         timestamps: true
@@ -116,7 +135,8 @@ adminSchema.methods.toSafeObject = function () {
         name: this.name,
         contact: this.contact,
         isSuperAdmin: this.isSuperAdmin,
-        permissions: this.isSuperAdmin ? PERMISSIONS : this.permissions
+        permissions: this.isSuperAdmin ? PERMISSIONS : this.permissions,
+        isVerified: this.isVerified
     };
 };
 

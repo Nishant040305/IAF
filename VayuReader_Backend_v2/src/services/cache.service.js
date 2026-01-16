@@ -71,18 +71,20 @@ const invalidatePdfCaches = async () => {
  */
 const invalidateByPattern = async (pattern) => {
     try {
-        let cursor = 0;
+        let cursor = '0'; // Redis returns cursor as string
         do {
+            // Redis v4 scan returns { cursor: string, keys: string[] }
             const result = await redisClient.scan(cursor, { MATCH: pattern, COUNT: 100 });
-            cursor = result.cursor;
+            cursor = String(result.cursor); // Ensure it's a string for comparison
             const keys = result.keys;
 
-            if (keys.length > 0) {
+            if (keys && keys.length > 0) {
                 await redisClient.del(keys);
             }
-        } while (cursor !== 0);
+        } while (cursor !== '0');
     } catch (error) {
         console.error(`Cache pattern invalidation error (${pattern}):`, error.message);
+        // Don't throw - cache errors shouldn't break the main operation
     }
 };
 

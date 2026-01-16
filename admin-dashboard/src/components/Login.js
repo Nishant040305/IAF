@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import api from '../utils/api';
 
-export default function Login({ onLoginSuccess }) {
+export default function Login({ onLoginSuccess, onForgotPassword }) {
     const [step, setStep] = useState(1); // 1: password, 2: OTP
     const [contact, setContact] = useState('');
     const [password, setPassword] = useState('');
@@ -155,6 +155,13 @@ export default function Login({ onLoginSuccess }) {
                         <button style={styles.button} disabled={loading}>
                             {loading ? 'Verifying...' : 'Login'}
                         </button>
+                        <button
+                            type="button"
+                            style={styles.forgotLink}
+                            onClick={onForgotPassword}
+                        >
+                            Forgot Password?
+                        </button>
                     </form>
                 ) : (
                     <form onSubmit={handleVerifyOtp}>
@@ -303,5 +310,16 @@ const styles = {
         fontSize: '14px',
         display: 'block',
         width: '100%',
+    },
+    forgotLink: {
+        background: 'none',
+        border: 'none',
+        color: '#2563eb',
+        marginTop: '16px',
+        cursor: 'pointer',
+        fontSize: '14px',
+        display: 'block',
+        width: '100%',
+        textDecoration: 'underline'
     }
 };

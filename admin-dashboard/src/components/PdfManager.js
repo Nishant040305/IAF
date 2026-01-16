@@ -25,7 +25,7 @@ const CancelIcon = () => (
   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
 );
 
-export default function PdfManager() {
+export default function PdfManager(props) {
   const [pdfs, setPdfs] = useState([]);
   const [categories, setCategories] = useState([]);
   const [total, setTotal] = useState(0);
@@ -111,18 +111,49 @@ export default function PdfManager() {
   // Fetch PDFs (Server-Side Pagination)
   const fetchPdfs = useCallback(() => {
     setLoading(true);
+
+    // Deep link handling: If targetPdfId is provided, fetch just that PDF
+    // Usually via props from Dashboard
+    const { targetPdfId, onClearTarget } = props; // Assuming these are passed in props
+
+    if (targetPdfId) {
+      // Use the dedicated admin route to prevent view count increment
+      api.get(`/api/pdfs/admin/${targetPdfId}`)
+        .then(res => {
+          const pdf = res.data.data || res.data;
+          setPdfs([pdf]); // Show only this PDF
+          setTotal(1);
+          setTotalPages(1);
+          // Optional: Open edit mode automatically?
+          // startEditing(pdf); 
+        })
+        .catch(err => {
+          console.warn("Admin PDF fetch failed, falling back to standard fetch (View count will increment):", err);
+
+          // Fallback to normal fetch
+          api.get(`/api/pdfs/${targetPdfId}`)
+            .then(res => {
+              const pdf = res.data.data || res.data;
+              setPdfs([pdf]);
+              setTotal(1);
+              setTotalPages(1);
+            })
+            .catch(fallbackErr => {
+              console.error("Fetch target PDF error:", fallbackErr);
+              alert("Could not find the requested PDF");
+              if (onClearTarget) onClearTarget();
+            });
+        })
+        .finally(() => setLoading(false));
+      return;
+    }
+
     const params = {
       page: currentPage,
       limit: pageSize,
       search: searchTerm || undefined,
       category: selectedFilterCategory || undefined
     };
-
-    // Determine endpoint based on search/filter presence
-    // NOTE: getAllPdfs now supports category filter, searchPdfs supports search text
-    // If strict search is needed we use searchPdfs, if just category filtering we use getAllPdfs
-    // Currently backend searchPdfs also searches category text, so it's safe to use searchPdfs if searchTerm exists.
-    // If only category is selected, getAllPdfs is better.
 
     let endpoint = '/api/pdfs/all';
     if (searchTerm) {
@@ -146,7 +177,7 @@ export default function PdfManager() {
         setPdfs([]);
       })
       .finally(() => setLoading(false));
-  }, [currentPage, pageSize, searchTerm, selectedFilterCategory]);
+  }, [currentPage, pageSize, searchTerm, selectedFilterCategory, props.targetPdfId]);
 
   useEffect(() => {
     fetchCategories();
@@ -287,6 +318,8 @@ export default function PdfManager() {
       alert(err.response?.data?.message || err.response?.data?.msg || 'Update failed');
     }
   };
+
+
 
   return (
     <div style={styles.wrapper}>

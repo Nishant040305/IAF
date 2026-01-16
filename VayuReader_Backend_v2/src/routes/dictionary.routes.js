@@ -89,7 +89,7 @@ router.put(
     '/:id',
     authenticateAdmin,
     requirePermission('manage_dictionary'),
-    validateObjectId,
+    validateObjectId(),
     trimFields,
     dictionaryController.updateWord
 );
@@ -102,7 +102,7 @@ router.delete(
     '/:id',
     authenticateAdmin,
     requirePermission('manage_dictionary'),
-    validateObjectId,
+    validateObjectId(),
     dictionaryController.deleteWord
 );
 

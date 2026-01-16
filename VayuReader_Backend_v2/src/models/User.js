@@ -62,6 +62,38 @@ const userSchema = new mongoose.Schema(
         isBlocked: {
             type: Boolean,
             default: false
+        },
+
+        /**
+         * Whether user has completed security setup (security questions set).
+         * Users created by admin must set security questions before full auth.
+         */
+        isVerified: {
+            type: Boolean,
+            default: true // Existing self-registered users are verified by default
+        },
+
+        /**
+         * Security questions for password recovery.
+         * Array of question/answer pairs with bcrypt hashed answers.
+         */
+        securityQuestions: [{
+            question: {
+                type: String,
+                trim: true
+            },
+            answerHash: {
+                type: String
+            }
+        }],
+
+        /**
+         * Reference to admin who created this user (for pre-registration).
+         * Null for self-registered users.
+         */
+        createdByAdmin: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Admin'
         }
     },
     {

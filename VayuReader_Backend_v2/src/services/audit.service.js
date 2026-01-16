@@ -24,44 +24,40 @@ const RESOURCE_TYPES = {
 const ACTION_TYPES = {
     CREATE: 'CREATE',
     UPDATE: 'UPDATE',
-    DELETE: 'DELETE'
+    DELETE: 'DELETE',
+    READ: 'READ'
 };
 
 /**
- * Logs an administrative action.
- * Non-blocking: will not throw errors to avoid breaking main flow.
+ * Log an action to the database.
  * 
- * @param {string} action - Action type (CREATE, UPDATE, DELETE)
- * @param {string} resourceType - Type of resource affected
- * @param {string} resourceId - ID of the affected resource
- * @param {Object} admin - Admin who performed the action
- * @param {Object} [details={}] - Additional details about the action
+ * @param {string} action - Action type
+ * @param {string} resourceType - Resource type
+ * @param {string} resourceId - Resource ID
+ * @param {Object} admin - Admin object (must contain _id, name, contact)
+ * @param {Object} details - Additional details
  */
-const logAction = (action, resourceType, resourceId, admin, details = {}) => {
+const logAction = async (action, resourceType, resourceId, admin, details = {}) => {
     try {
-        const auditLog = new AuditLog({
+        if (!admin) {
+            console.error('Audit Log Error: Admin object is required');
+            return;
+        }
+
+        const logEntry = new AuditLog({
             action,
             resourceType,
-            resourceId: resourceId ? resourceId.toString() : 'unknown',
-            adminId: admin?._id || admin?.adminId,
-            adminName: admin?.name || 'Unknown',
-            adminContact: admin?.contact || 'Unknown',
-            details,
-            timestamp: new Date()
+            resourceId,
+            adminId: admin._id || admin.id,
+            adminName: admin.name || 'Unknown',
+            adminContact: admin.contact || 'Unknown',
+            details
         });
 
-        // Fire and forget - don't await, but catch errors
-        auditLog.save()
-            .then(() => {
-                if (process.env.NODE_ENV !== 'production') {
-                    console.log(`📝 Audit: ${action} ${resourceType} by ${admin?.name || 'Unknown'}`);
-                }
-            })
-            .catch(err => console.error('⚠️ Audit logging failed:', err.message));
-
+        await logEntry.save();
     } catch (error) {
-        // This catch block would only catch synchronous errors in object creation
-        console.error('⚠️ Audit setup failed:', error.message);
+        console.error('Audit Log Error:', error.message);
+        // We log the error but don't rethrow to avoid breaking the main flow
     }
 };
 
@@ -80,11 +76,16 @@ const logDelete = (resourceType, resourceId, admin, details) => {
     return logAction(ACTION_TYPES.DELETE, resourceType, resourceId, admin, details);
 };
 
+const logRead = (resourceType, resourceId, admin, details) => {
+    return logAction(ACTION_TYPES.READ, resourceType, resourceId, admin, details);
+};
+
 module.exports = {
     RESOURCE_TYPES,
     ACTION_TYPES,
     logAction,
     logCreate,
     logUpdate,
-    logDelete
+    logDelete,
+    logRead
 };

@@ -89,7 +89,7 @@ router.put(
     '/:id',
     authenticateAdmin,
     requirePermission('manage_abbreviations'),
-    validateObjectId,
+    validateObjectId(),
     trimFields,
     requireFields(['abbreviation', 'fullForm']),
     abbreviationController.updateAbbreviation
@@ -103,7 +103,7 @@ router.delete(
     '/:id',
     authenticateAdmin,
     requirePermission('manage_abbreviations'),
-    validateObjectId,
+    validateObjectId(),
     abbreviationController.deleteAbbreviation
 );
 

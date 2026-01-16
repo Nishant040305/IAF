@@ -14,6 +14,9 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
+// Get max upload size from environment (default 100MB)
+const MAX_UPLOAD_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE_MB || '100', 10) * 1024 * 1024;
+
 // Controller
 const pdfController = require('../controllers/pdf.controller');
 
@@ -63,7 +66,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
     storage,
     fileFilter,
-    limits: { fileSize: 50 * 1024 * 1024 }
+    limits: { fileSize: MAX_UPLOAD_SIZE }
 });
 
 // =============================================================================
@@ -104,12 +107,29 @@ router.get(
  * GET /api/pdfs/:id
  * Get single PDF and increment view count.
  */
+/**
+ * GET /api/pdfs/admin/:id
+ * Get single PDF details for Admin (NO view count increment).
+ */
+router.get(
+    '/admin/:id',
+    authenticateAdmin,
+    validateObjectId(),
+    pdfController.getAdminPdfById
+);
+
+/**
+ * GET /api/pdfs/:id
+ * Get single PDF and increment view count.
+ */
 router.get(
     '/:id',
     unifiedAuth,
-    validateObjectId,
+    validateObjectId(),
     pdfController.getPdfById
 );
+
+
 
 /**
  * POST /api/pdfs/upload
@@ -135,7 +155,7 @@ router.put(
     '/:id',
     authenticateAdmin,
     requirePermission('manage_pdfs'),
-    validateObjectId,
+    validateObjectId(),
     upload.fields([
         { name: 'pdf', maxCount: 1 },
         { name: 'thumbnail', maxCount: 1 }
@@ -152,7 +172,7 @@ router.delete(
     '/:id',
     authenticateAdmin,
     requirePermission('manage_pdfs'),
-    validateObjectId,
+    validateObjectId(),
     pdfController.deletePdf
 );
 

@@ -15,7 +15,7 @@ const adminController = require('../controllers/admin.controller');
 
 // Middleware
 const { otpLimiter, loginLimiter } = require('../middleware/rateLimiter');
-const { authenticateAdmin, requireSuperAdmin } = require('../middleware/adminAuth');
+const { authenticateAdmin, requireSuperAdmin, requirePermission } = require('../middleware/adminAuth');
 const { requireFields, validateObjectId, trimFields } = require('../middleware/validate');
 
 // =============================================================================
@@ -57,5 +57,101 @@ router.get('/me', authenticateAdmin, adminController.getCurrentAdmin);
  * Logout and clear cookie.
  */
 router.post('/logout', adminController.logout);
+
+// =============================================================================
+// SUB-ADMIN MANAGEMENT ROUTES
+// =============================================================================
+
+/**
+ * GET /api/admin/sub-admins
+ * Get all sub-admins.
+ * Requires: Super admin OR manage_admins permission.
+ */
+router.get(
+    '/sub-admins',
+    authenticateAdmin,
+    requirePermission('manage_admins'),
+    adminController.getAllSubAdmins
+);
+
+/**
+ * GET /api/admin/sub-admins/:id
+ * Get a single sub-admin by ID.
+ */
+router.get(
+    '/sub-admins/:id',
+    authenticateAdmin,
+    requirePermission('manage_admins'),
+    validateObjectId('id'),
+    adminController.getSubAdminById
+);
+
+/**
+ * POST /api/admin/sub-admins
+ * Create a new sub-admin.
+ * Requires: Super admin OR manage_admins permission.
+ */
+router.post(
+    '/sub-admins',
+    authenticateAdmin,
+    requirePermission('manage_admins'),
+    trimFields,
+    requireFields(['name', 'contact', 'password']),
+    adminController.createSubAdmin
+);
+
+/**
+ * PUT /api/admin/sub-admins/:id
+ * Update a sub-admin's permissions.
+ */
+router.put(
+    '/sub-admins/:id',
+    authenticateAdmin,
+    requirePermission('manage_admins'),
+    validateObjectId('id'),
+    trimFields,
+    adminController.updateSubAdmin
+);
+
+/**
+ * DELETE /api/admin/sub-admins/:id
+ * Delete a sub-admin.
+ */
+router.delete(
+    '/sub-admins/:id',
+    authenticateAdmin,
+    requirePermission('manage_admins'),
+    validateObjectId('id'),
+    adminController.deleteSubAdmin
+);
+
+// =============================================================================
+// USER MANAGEMENT ROUTES (Admin creates users)
+// =============================================================================
+
+/**
+ * GET /api/admin/users
+ * Get all users (paginated with search).
+ */
+router.get(
+    '/users',
+    authenticateAdmin,
+    requirePermission('view_user_audit'),
+    adminController.getAllUsers
+);
+
+/**
+ * POST /api/admin/users
+ * Create a new user (admin pre-registration).
+ * User will need to set security questions on first login.
+ */
+router.post(
+    '/users',
+    authenticateAdmin,
+    requireSuperAdmin,
+    trimFields,
+    requireFields(['name', 'phone_number']),
+    adminController.createUser
+);
 
 module.exports = router;

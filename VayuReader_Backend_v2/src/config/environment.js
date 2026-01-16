@@ -124,7 +124,7 @@ const cors = {
  */
 const rateLimit = {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10), // 15 min
-    maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
+    maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '500', 10), // Increased for admin dashboard
     otpMaxRequests: parseInt(process.env.OTP_RATE_LIMIT_MAX || '5', 10)
 };
 

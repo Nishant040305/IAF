@@ -13,7 +13,7 @@ const { escapeRegex, createExactMatchRegex } = require('../utils/sanitize');
 
 const { redisClient } = require('../config/redis');
 const { invalidateWord, invalidateAllDictionaryCaches } = require('../services/cache.service');
-const { searchWords: esSearchWords, indexWord, deleteWord: deleteWordFromES } = require('../services/search.service');
+const { searchWords: esSearchWords, indexWord, deleteWord: deleteWordFromES, bulkIndexWords } = require('../services/search.service');
 
 /**
  * Look up a word and get related words.
@@ -377,8 +377,27 @@ const uploadDictionary = async (req, res, next) => {
             }
         }
 
+        // Sync to Elasticsearch (fetch inserted docs with _id for ES indexing)
+        try {
+            const insertedWords = await Word.find({ word: { $in: words.map(w => w.word) } }).lean();
+            if (insertedWords.length > 0) {
+                await bulkIndexWords(insertedWords);
+                console.log(`[ES] Indexed ${insertedWords.length} words`);
+            }
+        } catch (esError) {
+            console.error('[ES] Bulk index after upload failed:', esError.message);
+            // Don't fail the request - ES sync is non-critical
+        }
+
         // Invalidate all dictionary caches after bulk upload
         await invalidateAllDictionaryCaches();
+
+        await logCreate(RESOURCE_TYPES.DICTIONARY, 'bulk-upload', req.admin, {
+            count: insertedCount,
+            totalProcessed: processedCount,
+            duplicatesSkipped: duplicatesCount,
+            message: 'Bulk upload dictionary words'
+        });
 
         response.success(res, {
             totalWords: Object.keys(dictionaryData).length,
