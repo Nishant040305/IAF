@@ -49,7 +49,6 @@ export default function AbbreviationUploader() {
   // Staged upload state
   const [stagedData, setStagedData] = useState(null);
   const [stagedFileName, setStagedFileName] = useState('');
-  const [stagedFileType, setStagedFileType] = useState('');
 
   const csvInputRef = useRef();
   const jsonInputRef = useRef();
@@ -162,7 +161,6 @@ export default function AbbreviationUploader() {
 
       setStagedData(result.data);
       setStagedFileName(file.name);
-      setStagedFileType('csv');
       showMessage(`Ready to upload ${result.data.length} abbreviations from ${file.name}`, 'info');
     } catch (err) {
       showMessage('Failed to parse CSV: ' + err.message, 'error');
@@ -202,7 +200,6 @@ export default function AbbreviationUploader() {
 
       setStagedData(result.data);
       setStagedFileName(file.name);
-      setStagedFileType('json');
       showMessage(`Ready to upload ${result.data.length} abbreviations from ${file.name}`, 'info');
     } catch (err) {
       showMessage('Failed to parse JSON: ' + err.message, 'error');
@@ -223,7 +220,6 @@ export default function AbbreviationUploader() {
       showMessage(`Successfully uploaded ${stagedData.length} abbreviations`, 'success');
       setStagedData(null);
       setStagedFileName('');
-      setStagedFileType('');
       await fetchAbbreviations(1, pageSize);
     } catch (err) {
       showMessage('Upload failed: ' + (err.message || 'Unknown error'), 'error');
@@ -236,7 +232,6 @@ export default function AbbreviationUploader() {
   const handleCancelUpload = () => {
     setStagedData(null);
     setStagedFileName('');
-    setStagedFileType('');
     showMessage('Upload cancelled', 'info');
   };
 

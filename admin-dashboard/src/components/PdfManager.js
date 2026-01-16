@@ -33,7 +33,6 @@ export default function PdfManager(props) {
   const [loading, setLoading] = useState(false);
 
   const [file, setFile] = useState(null);
-  const [thumbnail, setThumbnail] = useState(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState('');
@@ -94,7 +93,7 @@ export default function PdfManager(props) {
   }, [addNotification]);
 
   // Subscribe to SSE events (DISABLED - set enabled: true to re-enable)
-  const { isConnected, connectionError } = usePdfEvents({
+  usePdfEvents({
     onPdfAdded: handlePdfAdded,
     onPdfUpdated: handlePdfUpdated,
     onPdfDeleted: handlePdfDeleted,
@@ -177,7 +176,7 @@ export default function PdfManager(props) {
         setPdfs([]);
       })
       .finally(() => setLoading(false));
-  }, [currentPage, pageSize, searchTerm, selectedFilterCategory, props.targetPdfId]);
+  }, [currentPage, pageSize, searchTerm, selectedFilterCategory, props]);
 
   useEffect(() => {
     fetchCategories();
@@ -267,7 +266,6 @@ export default function PdfManager(props) {
             });
             alert('PDF uploaded');
             setFile(null);
-            setThumbnail(null);
             setTitle('');
             setContent('');
             setCategory('');
