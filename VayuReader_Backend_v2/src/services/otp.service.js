@@ -175,12 +175,8 @@ const verifyOtp = async (providedOtp, identifier, loginToken = '', providedDevic
         };
     }
 
-    // Success - delete used OTP
-    // await deleteOtp(identifier); // Often handled by caller, but generally good to delete here if strictly one-time.
-    // However, keeping it might be necessary if we verify -> then use token. 
-    // The current flow suggests verifyOtp is just a check. 
-    // BUT the caller (adminRecovery.controller) deletes it manually after success resets password.
-    // So we don't delete here on success.
+    // Success - delete used OTP immediately to prevent Race Condition (Replay Attack)
+    await deleteOtp(identifier);
 
     return {
         valid: true,

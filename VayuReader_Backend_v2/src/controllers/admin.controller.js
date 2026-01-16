@@ -108,8 +108,8 @@ const verifyLoginOtp = async (req, res, next) => {
             return response.badRequest(res, verification.error);
         }
 
-        // Clear OTP from Redis
-        await deleteOtp(contact);
+        // Clear OTP from Redis - Handled in verifyOtp service
+        // await deleteOtp(contact);
 
         const token = generateAdminToken(admin);
 

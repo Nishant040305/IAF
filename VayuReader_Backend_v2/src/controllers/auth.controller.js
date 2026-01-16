@@ -146,8 +146,8 @@ const verifyLoginOtp = async (req, res, next) => {
             return response.badRequest(res, verification.error);
         }
 
-        // Clear OTP from Redis
-        await deleteOtp(phoneNumber);
+        // Clear OTP from Redis - Handled in verifyOtp service
+        // await deleteOtp(phoneNumber);
 
         // Handle device binding and change detection
         const isNewUser = !user.deviceId;

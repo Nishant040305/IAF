@@ -205,8 +205,8 @@ const resetPassword = async (req, res, next) => {
         admin.isVerified = true; // Ensure they are verified if they recover account
         await admin.save();
 
-        // Clear OTP
-        await deleteOtp(contact);
+        // Clear OTP - Handled in verifyOtp service
+        // await deleteOtp(contact);
 
         // Auto-login: Generate JWT
         const token = generateAdminToken(admin);
