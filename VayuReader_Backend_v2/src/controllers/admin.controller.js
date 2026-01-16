@@ -175,6 +175,15 @@ const createSubAdmin = async (req, res, next) => {
             ? permissions.filter(p => Admin.PERMISSIONS.includes(p))
             : [];
 
+        // RBAC Security Check: Prevent privilege escalation
+        // Non-super admins cannot grant permissions they don't possess
+        if (!req.admin.isSuperAdmin) {
+            const hasAllPermissions = validPermissions.every(p => req.admin.permissions.includes(p));
+            if (!hasAllPermissions) {
+                return response.forbidden(res, 'You cannot grant permissions you do not possess');
+            }
+        }
+
         // Hash password
         const passwordHash = await hashPassword(password);
 
@@ -223,6 +232,15 @@ const updateSubAdmin = async (req, res, next) => {
         const validPermissions = permissions && Array.isArray(permissions)
             ? permissions.filter(p => Admin.PERMISSIONS.includes(p))
             : [];
+
+        // RBAC Security Check: Prevent privilege escalation
+        // Non-super admins cannot grant permissions they don't possess
+        if (!req.admin.isSuperAdmin) {
+            const hasAllPermissions = validPermissions.every(p => req.admin.permissions.includes(p));
+            if (!hasAllPermissions) {
+                return response.forbidden(res, 'You cannot grant permissions you do not possess');
+            }
+        }
 
         const oldPermissions = admin.permissions;
         admin.permissions = validPermissions;
