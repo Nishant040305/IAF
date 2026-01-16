@@ -14,6 +14,7 @@ const { publishPdfEvent, PDF_EVENTS } = require('../services/pubsub.service');
 const { logPdfRead } = require('../services/userAudit.service');
 const response = require('../utils/response');
 const { escapeRegex } = require('../utils/sanitize');
+const { validateFileType, ALLOWED_TYPES } = require('../utils/fileValidator');
 
 const { redisClient } = require('../config/redis');
 
@@ -215,6 +216,32 @@ const uploadPdf = async (req, res, next) => {
             ? `/uploads/${req.folderName}/${thumbnailFile.filename}`
             : undefined;
 
+        // Security Check: Validate Magic Bytes (File Content)
+        // We must read the file from disk because multer has already saved it.
+        if (pdfFile) {
+            const buffer = await fs.readFile(pdfFile.path);
+            const validPdf = await validateFileType(buffer, ALLOWED_TYPES.pdf);
+            if (!validPdf.valid) {
+                // Unlink invalid files
+                await fs.unlink(pdfFile.path).catch(() => { });
+                if (thumbnailFile) await fs.unlink(thumbnailFile.path).catch(() => { });
+
+                return response.badRequest(res, `Invalid PDF file content. Detected: ${validPdf.type ? validPdf.type.mime : 'unknown'}`);
+            }
+        }
+
+        if (thumbnailFile) {
+            const buffer = await fs.readFile(thumbnailFile.path);
+            const validImage = await validateFileType(buffer, ALLOWED_TYPES.image);
+            if (!validImage.valid) {
+                // Unlink invalid files
+                await fs.unlink(thumbnailFile.path).catch(() => { });
+                if (pdfFile) await fs.unlink(pdfFile.path).catch(() => { });
+
+                return response.badRequest(res, `Invalid thumbnail file content. Detected: ${validImage.type ? validImage.type.mime : 'unknown'}`);
+            }
+        }
+
         const newDoc = new PdfDocument({
             title,
             content,
@@ -266,10 +293,28 @@ const updatePdf = async (req, res, next) => {
 
         if (pdfFile) {
             updateData.pdfUrl = `/uploads/${req.folderName}/${pdfFile.filename}`;
+
+            // Security Check: Validate PDF
+            const buffer = await fs.readFile(pdfFile.path);
+            const validPdf = await validateFileType(buffer, ALLOWED_TYPES.pdf);
+            if (!validPdf.valid) {
+                await fs.unlink(pdfFile.path).catch(() => { });
+                if (thumbnailFile) await fs.unlink(thumbnailFile.path).catch(() => { }); // Cleanup both if one fails
+                return response.badRequest(res, `Invalid PDF file content. Detected: ${validPdf.type ? validPdf.type.mime : 'unknown'}`);
+            }
         }
 
         if (thumbnailFile) {
             updateData.thumbnail = `/uploads/${req.folderName}/${thumbnailFile.filename}`;
+
+            // Security Check: Validate Thumbnail
+            const buffer = await fs.readFile(thumbnailFile.path);
+            const validImage = await validateFileType(buffer, ALLOWED_TYPES.image);
+            if (!validImage.valid) {
+                await fs.unlink(thumbnailFile.path).catch(() => { });
+                if (pdfFile) await fs.unlink(pdfFile.path).catch(() => { }); // Cleanup both
+                return response.badRequest(res, `Invalid thumbnail file content. Detected: ${validImage.type ? validImage.type.mime : 'unknown'}`);
+            }
         }
 
         const updated = await PdfDocument.findByIdAndUpdate(

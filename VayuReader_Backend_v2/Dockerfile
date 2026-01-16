@@ -48,4 +48,4 @@ EXPOSE 3000
 
 # Start server using legacy entrypoint or standard
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "src/server.js"]
+CMD ["node", "src/cluster.js"]

@@ -141,7 +141,7 @@ const requirePermission = (permission) => (req, res, next) => {
  * @param {Object} res - Express response
  * @param {Function} next - Next middleware
  */
-const unifiedAuth = (req, res, next) => {
+const unifiedAuth = async (req, res, next) => {
     try {
         let token;
 
@@ -166,12 +166,18 @@ const unifiedAuth = (req, res, next) => {
         const decoded = verifyToken(token);
 
         if (decoded.type === 'admin') {
+            // Fix Zombie Admin: Validate admin exists in DB even for unifiedAuth
+            const admin = await Admin.findById(decoded.adminId);
+            if (!admin) {
+                return response.unauthorized(res, 'Admin account no longer exists');
+            }
+
             req.admin = {
-                adminId: decoded.adminId,
-                name: decoded.name,
-                contact: decoded.contact,
-                isSuperAdmin: decoded.isSuperAdmin,
-                permissions: decoded.permissions || []
+                adminId: admin._id,
+                name: admin.name,
+                contact: admin.contact,
+                isSuperAdmin: admin.isSuperAdmin,
+                permissions: admin.permissions || []
             };
             req.userType = 'admin';
             return next();
