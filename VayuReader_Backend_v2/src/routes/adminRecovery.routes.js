@@ -14,7 +14,7 @@ const adminRecoveryController = require('../controllers/adminRecovery.controller
 
 // Middleware
 const { authenticateAdmin } = require('../middleware/adminAuth');
-const { otpLimiter } = require('../middleware/rateLimiter');
+const { otpLimiter, loginLimiter } = require('../middleware/rateLimiter');
 const { requireFields, trimFields } = require('../middleware/validate');
 
 // =============================================================================
@@ -47,7 +47,7 @@ router.post(
  */
 router.post(
     '/initiate',
-    otpLimiter,
+    loginLimiter,
     trimFields,
     requireFields(['contact']),
     adminRecoveryController.initiateRecovery

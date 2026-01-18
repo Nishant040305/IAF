@@ -15,7 +15,7 @@ const recoveryController = require('../controllers/recovery.controller');
 
 // Middleware
 const { authenticateUser } = require('../middleware/auth');
-const { otpLimiter } = require('../middleware/rateLimiter');
+const { otpLimiter, loginLimiter } = require('../middleware/rateLimiter');
 const { requireFields, trimFields } = require('../middleware/validate');
 
 // =============================================================================
@@ -48,7 +48,7 @@ router.post(
  */
 router.post(
     '/initiate',
-    otpLimiter,
+    loginLimiter,
     trimFields,
     requireFields(['phone_number']),
     recoveryController.initiateRecovery
