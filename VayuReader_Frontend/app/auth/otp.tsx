@@ -90,12 +90,14 @@ const OtpScreen = () => {
       router.replace('/(tabs)');
     } catch (err: any) {
       console.error('[OTP] Verification Catch:', err);
+      const endpoint = `${AUTH_BASE_URL}/api/auth/login/verify-otp`;
+      const statusCode = err?.response?.status || 'No status';
       const serverMessage = err?.response?.data?.message;
       const internalMessage = err?.message;
       const finalMessage = serverMessage || internalMessage || 'Unknown error during verification';
 
       setError(finalMessage);
-      Alert.alert('Verification failed', `Error: ${finalMessage}\n\nTrace: ${internalMessage || 'No trace'}`, [
+      Alert.alert('Verification failed', `Error: ${finalMessage}\n\nEndpoint: ${endpoint}\nStatus: ${statusCode}\nTrace: ${internalMessage || 'No trace'}`, [
         { text: 'OK' },
         { text: 'Reset Login', onPress: () => router.replace('/auth/login') },
       ]);
@@ -128,8 +130,16 @@ const OtpScreen = () => {
       // Clear OTP fields on resend
       setDigits(['', '', '', '', '', '']);
     } catch (err: any) {
-      const message = err?.response?.data?.message || 'Failed to resend OTP.';
+      const endpoint = `${AUTH_BASE_URL}/api/auth/login/request-otp`;
+      const statusCode = err?.response?.status || 'No status';
+      const serverMessage = err?.response?.data?.message;
+      const errorMessage = err?.message;
+      const message = serverMessage || errorMessage || 'Failed to resend OTP.';
       setError(message);
+      Alert.alert(
+        'Failed to resend OTP',
+        `Error: ${message}\n\nEndpoint: ${endpoint}\nStatus: ${statusCode}\nTrace: ${errorMessage || 'No trace'}`
+      );
     } finally {
       setResending(false);
     }
