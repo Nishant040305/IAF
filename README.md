@@ -8,22 +8,27 @@ It aims to provide protection from every sort of attack and with scalability the
    and with it being most valuable information on the site.
 
 Q: Why to seperate them?
+
 A: With miliseconds of performance with minimilistic resources its practically everything lands to High Network latency and small case systems
    along with nodejs server which is not that scalable at all. Not when you need protection from MITM and in flight tampering of request.
 
 Q: Why to choose nodejs
+
 A: No body should in case you plan to server such a large network with few resource its not scalable because of single thread and un typed system, but since the original code was written in nodejs
    even after considering bad option. The best development speed is always offered by nodejs
 
 Q: What branch I should use?
+
 A: Depends on your usecase suggestion for any normal user you can go for deployment branch as this branch will have more updates and optimization to save your deployment cost and memory usage along with cpu
    utilisation, but for security as a main issue you can go with Encrypted branch.
 
 Q: Should we use the original code since its a fork?
-A: Yes, Its a fork but of a dead code base with -ve sense architecture with 0 scalability and reliablity as the complete frontend - backend is rewritten, only apk is not modified as its UI is loved by many though I
+
+A: Yes, Its a fork but of a dead code base with -ve sense architecture with -7 scalability and reliablity as the complete frontend - backend is rewritten, only apk is not modified as its UI is loved by many though I
    dont like it at all whole design is very poor but thats the only part where only small tweeks were done
 
 Q: Can you contribute?
+
 A: Thats why its public but improving backend would be admired , UI have some practical flaw and have lazy implementation if you are intreasted to add u can do that too. like allowing user with no authority in admin-dashboard
    must be able to see pdfs , Dictionary and Abbreviation. These things are supposed to be public and UI just does not but it does not mean he should'nt see they are suppose to see but due to lazy coding it is as it is so would always
    appriciate open source contribution.
@@ -48,20 +53,25 @@ Deployment Branch: What makes this special
 How to proceed:
 
 check the [book](https://github.com/Nishant040305/vayureader/tree/Encrypted/vayureader/docs/pdf_output)
+
 for short [guide](https://github.com/Nishant040305/vayureader/blob/Encrypted/vayureader/docs/setup.md)
+
 some document updates required to be done as it includes the latest changes and commits and change in the plan a new documentation style would be opted.
+
 currently the information that the docs is supposed to include can be refered from this README.md file
 
 you can refer to vayureader/docs/output/book.pdf book contains all the information about the project
 
 Current Versions:
-Nginx: 1.25-alpine
-redis: 7.2-alpine
-mongo: 6-jammy
-elasticsearch: 8.11.0
-node: 20-alpine
-react: ^19.0.1
-react-native: 0.79.3
-expo: ~53.0.10
+1. Nginx: 1.25-alpine
+2. redis: 7.2-alpine
+3. mongo: 6-jammy
+4. elasticsearch: 8.11.0
+5. node: 20-alpine
+6. react: ^19.0.1
+7. react-native: 0.79.3
+8. expo: ~53.0.10
+   
 rest of library info can be verified from the package.json file of backend and frontend and admin dashboard
 
+Any issues are very welcome I would love hear(or resolve) about them and that would be a great learning thank you.
