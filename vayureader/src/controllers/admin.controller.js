@@ -42,17 +42,12 @@ const requestLoginOtp = async (req, res, next) => {
         // Find admin by contact
         const admin = await Admin.findOne({ contact });
 
-        if (!admin) {
-
-            // Use generic message to prevent user enumeration
-            return response.unauthorized(res, 'Invalid credentials');
-        }
-
         // Verify password (Factor 1: Something you know)
-        const isPasswordValid = await comparePassword(password, admin.passwordHash);
+        // If admin is not found, verify against dummy hash to mitigate timing attacks (User Enumeration)
+        const DUMMY_HASH = '$2b$12$LhOq917wD.JbJzT2eKkPmeQ7p0Q8kZ4uS/XN2Gg0Q9g/7sR1iBvjW';
+        const isPasswordValid = await comparePassword(password, admin ? admin.passwordHash : DUMMY_HASH);
 
-
-        if (!isPasswordValid) {
+        if (!admin || !isPasswordValid) {
             return response.unauthorized(res, 'Invalid credentials');
         }
 
@@ -240,14 +235,20 @@ const updateSubAdmin = async (req, res, next) => {
             ? permissions.filter(p => Admin.PERMISSIONS.includes(p))
             : [];
 
-        // RBAC Security Check: Prevent privilege escalation
-        // Admins cannot grant permissions they don't possess
+        // RBAC Security Check: Prevent privilege escalation (cannot grant permissions you don't possess)
         const hasAllPermissions = validPermissions.every(p => req.admin.permissions.includes(p));
         if (!hasAllPermissions) {
             return response.forbidden(res, 'You cannot grant permissions you do not possess');
         }
 
         const oldPermissions = admin.permissions;
+
+        // RBAC Security Check: Prevent privilege manipulation of superior admins (cannot modify an admin holding permissions you don't possess)
+        const canModifyTarget = (oldPermissions || []).every(p => req.admin.permissions.includes(p));
+        if (!canModifyTarget) {
+            return response.forbidden(res, 'You cannot modify an admin who possesses permissions greater than your own');
+        }
+
         admin.permissions = validPermissions;
         await admin.save();
 
@@ -282,6 +283,13 @@ const deleteSubAdmin = async (req, res, next) => {
 
         if (req.params.id === req.admin.adminId.toString()) {
             return response.forbidden(res, 'You cannot delete your own admin account');
+        }
+
+        // RBAC Security Check: Prevent deletion of superior admins
+        const oldPermissions = admin.permissions || [];
+        const canModifyTarget = oldPermissions.every(p => req.admin.permissions.includes(p));
+        if (!canModifyTarget) {
+            return response.forbidden(res, 'You cannot delete an admin who possesses permissions greater than your own');
         }
 
         await Admin.findByIdAndDelete(req.params.id);
