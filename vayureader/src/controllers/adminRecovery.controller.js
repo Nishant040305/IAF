@@ -194,6 +194,10 @@ const resetPassword = async (req, res, next) => {
             return response.badRequest(res, 'Password must be at least 8 characters long');
         }
 
+        if (newPassword.length > 100) {
+            return response.badRequest(res, 'Password must be at most 100 characters long');
+        }
+
         const admin = await Admin.findOne({ contact });
         if (!admin) {
             return response.badRequest(res, 'Invalid contact');

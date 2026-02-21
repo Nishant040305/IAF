@@ -35,6 +35,10 @@ const requestLoginOtp = async (req, res, next) => {
             return response.badRequest(res, 'Contact and password are required');
         }
 
+        if (password.length > 100) {
+            return response.badRequest(res, 'Password must be at most 100 characters long');
+        }
+
         // Find admin by contact
         const admin = await Admin.findOne({ contact });
 
@@ -166,6 +170,10 @@ const createSubAdmin = async (req, res, next) => {
 
         if (!password || password.length < 8) {
             return response.badRequest(res, 'Password must be at least 8 characters');
+        }
+
+        if (password.length > 100) {
+            return response.badRequest(res, 'Password must be at most 100 characters long');
         }
 
         // Check for existing admin
