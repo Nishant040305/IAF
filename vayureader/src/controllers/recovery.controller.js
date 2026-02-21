@@ -33,8 +33,8 @@ const setupSecurityQuestions = async (req, res, next) => {
     try {
         const { securityQuestions } = req.body;
 
-        if (!Array.isArray(securityQuestions) || securityQuestions.length < 2) {
-            return response.badRequest(res, 'At least 2 security questions are required');
+        if (!Array.isArray(securityQuestions) || securityQuestions.length < 3) {
+            return response.badRequest(res, 'At least 3 security questions are required');
         }
 
         if (securityQuestions.length > 5) {

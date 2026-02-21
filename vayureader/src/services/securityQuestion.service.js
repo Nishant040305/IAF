@@ -53,7 +53,7 @@ const hashAnswer = async (answer) => {
  * @returns {Promise<Array<{question: string, answerHash: string}>>} - Hashed Q&A pairs
  */
 const hashSecurityAnswers = async (questionAnswers) => {
-    if (!Array.isArray(questionAnswers) || questionAnswers.length === 0) {
+    if (!Array.isArray(questionAnswers) || questionAnswers.length < 3) {
         throw new Error('At least 3 security questions are required');
     }
 
@@ -109,7 +109,18 @@ const verifySecurityAnswers = async (providedAnswers, storedQuestions) => {
         storedQuestions.map(q => [q.question, q.answerHash])
     );
 
+    const answeredQuestions = new Set();
+
     for (const { question, answer } of providedAnswers) {
+        if (!question || !answer) {
+            return { valid: false, error: 'Question and answer are required' };
+        }
+
+        if (answeredQuestions.has(question)) {
+            return { valid: false, error: 'Duplicate security question provided' };
+        }
+        answeredQuestions.add(question);
+
         const storedHash = storedMap.get(question);
         if (!storedHash) {
             return { valid: false, error: `Unknown question: ${question}` };
@@ -119,6 +130,11 @@ const verifySecurityAnswers = async (providedAnswers, storedQuestions) => {
         if (!isCorrect) {
             return { valid: false, error: 'One or more answers are incorrect' };
         }
+    }
+
+    // Final sanity check
+    if (answeredQuestions.size !== storedQuestions.length) {
+        return { valid: false, error: 'Incomplete security questions answered' };
     }
 
     return { valid: true };

@@ -337,12 +337,28 @@ const updatePdf = async (req, res, next) => {
         // Clean up old files that were replaced
         if (pdfFile && oldDoc.pdfUrl) {
             const oldPdfPath = path.join(__dirname, '..', '..', oldDoc.pdfUrl);
-            fs.unlink(oldPdfPath).catch(() => { });
+            fs.unlink(oldPdfPath)
+                .then(async () => {
+                    try {
+                        const dir = path.dirname(oldPdfPath);
+                        const files = await fs.readdir(dir);
+                        if (files.length === 0) await fs.rmdir(dir);
+                    } catch (e) { }
+                })
+                .catch(() => { });
         }
         if (pdfFile && oldDoc.thumbnail) {
             // If we uploaded a new PDF, the old thumbnail is stale
             const oldThumbPath = path.join(__dirname, '..', '..', oldDoc.thumbnail);
-            fs.unlink(oldThumbPath).catch(() => { });
+            fs.unlink(oldThumbPath)
+                .then(async () => {
+                    try {
+                        const dir = path.dirname(oldThumbPath);
+                        const files = await fs.readdir(dir);
+                        if (files.length === 0) await fs.rmdir(dir);
+                    } catch (e) { }
+                })
+                .catch(() => { });
         }
 
         await logUpdate(RESOURCE_TYPES.PDF, updated._id, req.admin, {
