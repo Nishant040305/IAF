@@ -63,7 +63,8 @@ const authenticateUser = async (req, res, next) => {
             userId: decoded.userId,
             phone_number: decoded.phone_number,
             deviceId: decoded.deviceId,
-            name: decoded.name
+            name: decoded.name,
+            tokenVersion: currentTokenVersion
         };
 
         next();
@@ -117,7 +118,8 @@ const optionalAuth = async (req, res, next) => {
                     userId: decoded.userId,
                     phone_number: decoded.phone_number,
                     deviceId: decoded.deviceId,
-                    name: decoded.name
+                    name: decoded.name,
+                    tokenVersion: currentTokenVersion
                 };
             }
         } else if (decoded.type === 'admin') {
@@ -139,7 +141,8 @@ const optionalAuth = async (req, res, next) => {
                 adminId: admin._id,
                 name: admin.name,
                 contact: admin.contact,
-                permissions: admin.permissions || []
+                permissions: admin.permissions || [],
+                tokenVersion: currentTokenVersion
             };
         }
     } catch (error) {

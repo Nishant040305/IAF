@@ -29,8 +29,10 @@ const invalidateWord = async (word) => {
         await redisClient.del(cacheKey);
         // Also invalidate the words preview list
         await redisClient.del('words:preview:100');
-        // Invalidate paginated dictionary list caches (if enabled)
+        // Invalidate paginated dictionary list caches
         await invalidateByPattern('words:all:*');
+        // Invalidate search caches (deleted/updated word may appear in search results)
+        await invalidateByPattern('word:search:*');
     } catch (error) {
         console.error('Cache invalidation error (word):', error.message);
     }
@@ -100,6 +102,7 @@ const invalidateAllDictionaryCaches = async () => {
         await invalidateByPattern('word:*');
         await redisClient.del('words:preview:100');
         await invalidateByPattern('words:all:*');
+        await invalidateByPattern('word:search:*');
     } catch (error) {
         console.error('Cache invalidation error (all dictionary):', error.message);
     }

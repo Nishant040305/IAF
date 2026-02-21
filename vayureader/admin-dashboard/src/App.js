@@ -10,6 +10,7 @@ import {
   clearAdminToken,
   getPermissionsFromToken
 } from './utils/adminToken';
+import { clearKeyCache } from './utils/encryption';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -76,6 +77,7 @@ function App() {
     api.post('/api/admin/logout').catch(() => { });
     localStorage.removeItem('admin_info');
     clearAdminToken();
+    clearKeyCache();
     setAdminTokenState(null);
     setUser(null);
   };

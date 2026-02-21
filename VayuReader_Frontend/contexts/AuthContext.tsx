@@ -4,6 +4,7 @@ import axios from 'axios';
 import { AUTH_BASE_URL } from '@/constants/config';
 import { AuthUser, clearToken as clearStoredToken, getToken, getUser, setExpiry as storeExpiry, setToken as storeToken, setUser as storeUser } from '@/lib/authStorage';
 import { setUnauthorizedHandler } from '@/lib/apiClient';
+import { clearKeyCache } from '@/lib/encryption';
 
 type AuthContextShape = {
   token: string | null;
@@ -136,6 +137,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     await clearStoredToken();
+    clearKeyCache();
     setTokenState(null);
     setUserState(null);
   }, [token]);

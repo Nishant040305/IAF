@@ -101,17 +101,25 @@ const bulkUploadRoutes = [
     '/api/abbreviations/bulk'
 ];
 app.use(bulkUploadRoutes, express.json({ limit: '100mb' }));
+app.use(bulkUploadRoutes, express.text({ limit: '100mb' }));
 
 // 2. Enforce 1MB limit for all other JSON requests
 app.use(express.json({ limit: '1mb' }));
 
-// 3. standard URL-encoded limit
+// 3. Parse text/plain bodies (E2EE encrypted payloads arrive as raw text)
+app.use(express.text({ limit: '1mb' }));
+
+// 4. standard URL-encoded limit
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Trim whitespace from string fields
 app.use(trimFields);
 
-// API Payload Guards
+// E2EE: Decrypt first, so injection guard checks real content (not encrypted gibberish)
+const { e2eeMiddleware } = require('./middleware/encryption');
+app.use('/api', e2eeMiddleware);
+
+// API Payload Guards (runs on decrypted content)
 app.use('/api', apiInjectionGuard);
 
 // Rate limiting on all API routes (except SSE - it's a single long-lived connection)
@@ -128,6 +136,11 @@ app.use('/api', (req, res, next) => {
     if (req.path === '/events' || req.url.startsWith('/events')) {
         return next();
     }
+    // Give bulk uploads a full 1-minute timeout
+    if (req.path === '/dictionary/upload' || req.path === '/abbreviations/bulk') {
+        return requestTimeout(60000)(req, res, next);
+    }
+
     requestTimeout(30000)(req, res, next);
 });
 

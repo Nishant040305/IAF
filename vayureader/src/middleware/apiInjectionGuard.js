@@ -3,7 +3,7 @@
  * 
  * Comprehensive security middleware that detects and blocks:
  * - CSV/Formula Injection (=HYPERLINK, =SUM, +cmd, DDE macros)
- * - JSON/NoSQL Key Injection ($ne, $gt, dot-notation keys)
+ * - JSON/NoSQL Key Injection ($ne, $gt, $where operators)
  * - XSS/Script Injection (<script>, <iframe>, javascript: URIs)
  * - Path Traversal attempts (../, null bytes)
  * 
@@ -57,11 +57,6 @@ const inspectPayload = (obj, depth = 0) => {
             return `XSS/Event Handler Injection detected in payload`;
         }
 
-        // Path traversal in string values
-        if (PATH_TRAVERSAL_REGEX.test(obj)) {
-            return `Path Traversal attempt detected: "${obj.substring(0, 100)}"`;
-        }
-
     } else if (Array.isArray(obj)) {
         for (let i = 0; i < obj.length; i++) {
             const threat = inspectPayload(obj[i], depth + 1);
@@ -70,9 +65,9 @@ const inspectPayload = (obj, depth = 0) => {
 
     } else if (obj !== null && typeof obj === 'object') {
         for (const [key, value] of Object.entries(obj)) {
-            // JSON/NoSQL Key Injection ($ne, $gt, etc.)
-            if (key.startsWith('$') || key.includes('.')) {
-                return `JSON/NoSQL Key Injection detected: "${key}"`;
+            // NoSQL operator injection ($ne, $gt, $where, etc.)
+            if (key.startsWith('$')) {
+                return `NoSQL Operator Injection detected: "${key}"`;
             }
 
             // Prototype pollution
@@ -88,9 +83,8 @@ const inspectPayload = (obj, depth = 0) => {
     return null;
 };
 
-// ─── Middleware ───────────────────────────────────────────────────────────────
-
 const apiInjectionGuard = (req, res, next) => {
+
     // Check payload-bearing requests (POST, PUT, PATCH)
     if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
         const threat = inspectPayload(req.body);

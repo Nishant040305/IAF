@@ -80,7 +80,8 @@ const authenticateAdmin = async (req, res, next) => {
             adminId: admin._id,
             name: admin.name,
             contact: admin.contact,
-            permissions: admin.permissions || []
+            permissions: admin.permissions || [],
+            tokenVersion: currentTokenVersion
         };
 
         next();
@@ -181,7 +182,8 @@ const unifiedAuth = async (req, res, next) => {
                 adminId: admin._id,
                 name: admin.name,
                 contact: admin.contact,
-                permissions: admin.permissions || []
+                permissions: admin.permissions || [],
+                tokenVersion: currentTokenVersion
             };
             req.userType = 'admin';
             return next();
@@ -221,7 +223,7 @@ const unifiedAuth = async (req, res, next) => {
                 return response.unauthorized(res, 'Session expired. Please login again.');
             }
 
-            req.user = { userId: decoded.userId };
+            req.user = { userId: decoded.userId, phone_number: decoded.phone_number, tokenVersion: currentTokenVersion };
             req.userType = 'user';
             return next();
         }
