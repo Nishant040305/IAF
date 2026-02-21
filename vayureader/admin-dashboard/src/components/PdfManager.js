@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../utils/api';
+import { getAdminToken } from '../utils/adminToken';
+import { getSessionKey, encrypt } from '../utils/encryption';
 import { usePdfEvents } from '../hooks/usePdfEvents';
 import { useNotifications, NotificationToast } from '../hooks/useNotifications';
 import Pagination from './Pagination';
@@ -240,6 +242,24 @@ export default function PdfManager(props) {
     formData.append('content', content);
     formData.append('category', usedCategory);
 
+    // Frontend Security: Attach E2EE signature for multipart validation
+    try {
+      const token = getAdminToken();
+      if (token) {
+        const key = await getSessionKey(token);
+        if (key) {
+          const signaturePayload = JSON.stringify({
+            secureFileMatch: true,
+            timestamp: Date.now()
+          });
+          const encryptedSignature = await encrypt(signaturePayload, key);
+          formData.append('_e2eeMeta', encryptedSignature);
+        }
+      }
+    } catch (err) {
+      console.error('[E2EE] Failed to generate multipart signature', err);
+    }
+
     try {
       setLoading(true);
       await api.post('/api/pdfs/upload', formData, {
@@ -282,6 +302,24 @@ export default function PdfManager(props) {
     formData.append('content', editContent);
     formData.append('category', editCategory);
     if (editFile) formData.append('pdf', editFile);
+
+    // Frontend Security: Attach E2EE signature for multipart validation
+    try {
+      const token = getAdminToken();
+      if (token) {
+        const key = await getSessionKey(token);
+        if (key) {
+          const signaturePayload = JSON.stringify({
+            secureFileMatch: true,
+            timestamp: Date.now()
+          });
+          const encryptedSignature = await encrypt(signaturePayload, key);
+          formData.append('_e2eeMeta', encryptedSignature);
+        }
+      }
+    } catch (err) {
+      console.error('[E2EE] Failed to generate multipart signature', err);
+    }
 
     try {
       await api.put(`/api/pdfs/${id}`, formData, {

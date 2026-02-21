@@ -131,8 +131,38 @@ const e2eeMiddleware = (req, res, next) => {
     next();
 };
 
+const verifyMultipartE2EESignature = (req, res, next) => {
+    try {
+        if (!req._e2eeIdentity) return next();
+
+        const signature = req.body._e2eeMeta;
+        if (!signature) {
+            return response.badRequest(res, 'Missing E2EE security signature for file upload');
+        }
+
+        const key = deriveKey(req._e2eeIdentity.id, req._e2eeIdentity.contact, req._e2eeIdentity.tokenVersion);
+        const decrypted = JSON.parse(decrypt(signature, key));
+
+        if (!decrypted.secureFileMatch || !decrypted.timestamp) {
+            return response.badRequest(res, 'Invalid E2EE security signature payload');
+        }
+
+        const ageMs = Date.now() - decrypted.timestamp;
+        if (ageMs > 5 * 60 * 1000 || ageMs < -60000) {
+            return response.badRequest(res, 'E2EE signature expired (replay attack protection)');
+        }
+
+        delete req.body._e2eeMeta;
+        next();
+    } catch (err) {
+        console.error('[E2EE] Multipart signature decryption failed:', err.message);
+        return response.badRequest(res, 'E2EE signature validation failed. Upload rejected.');
+    }
+};
+
 module.exports = {
     e2eeMiddleware,
+    verifyMultipartE2EESignature,
     extractIdentity,
     isExcluded,
     EXCLUDED_PATHS

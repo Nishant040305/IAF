@@ -23,6 +23,7 @@ const pdfController = require('../controllers/pdf.controller');
 // Middleware
 const { unifiedAuth, authenticateAdmin, requirePermission } = require('../middleware/adminAuth');
 const { validateObjectId, trimFields } = require('../middleware/validate');
+const { verifyMultipartE2EESignature } = require('../middleware/encryption');
 const { ALLOWED_TYPES } = require('../utils/fileValidator');
 
 // =============================================================================
@@ -55,11 +56,12 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-    const allowedMimes = [...ALLOWED_TYPES.pdf, ...ALLOWED_TYPES.image];
+    // SECURITY: Strictly allow ONLY PDF files. Reject all images, documents, and executables.
+    const allowedMimes = [...ALLOWED_TYPES.pdf];
     if (allowedMimes.includes(file.mimetype)) {
         cb(null, true);
     } else {
-        cb(new Error('Only PDF and image files are allowed'), false);
+        cb(new Error('Security check failed: Only strictly typed PDF files are allowed'), false);
     }
 };
 
@@ -149,6 +151,7 @@ router.post(
     authenticateAdmin,
     requirePermission('manage_pdfs'),
     upload.single('pdf'),
+    verifyMultipartE2EESignature, // <--- Add E2EE metadata handshake
     trimFields,
     pdfController.uploadPdf
 );
@@ -163,6 +166,7 @@ router.put(
     requirePermission('manage_pdfs'),
     validateObjectId(),
     upload.single('pdf'),
+    verifyMultipartE2EESignature, // <--- Add E2EE metadata handshake
     trimFields,
     pdfController.updatePdf
 );
