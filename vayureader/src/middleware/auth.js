@@ -44,12 +44,18 @@ const authenticateUser = async (req, res, next) => {
         }
 
         // Check if user is blocked or deleted
-        const user = await User.findById(decoded.userId).select('isBlocked tokenVersion');
+        const user = await User.findById(decoded.userId).select('isBlocked tokenVersion isVerified');
         if (!user) {
             return response.unauthorized(res, 'User no longer exists');
         }
         if (user.isBlocked) {
             return response.unauthorized(res, 'User is blocked');
+        }
+
+        // Enforce security questions setup
+        const isSetupPath = req.path === '/security-setup' || req.path === '/api/recovery/setup' || req.path === '/setup';
+        if (!user.isVerified && !isSetupPath) {
+            return response.forbidden(res, 'Security setup required');
         }
 
         const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
@@ -106,7 +112,7 @@ const optionalAuth = async (req, res, next) => {
 
         if (decoded.type === 'user') {
             // Validate user still exists and is not blocked
-            const user = await User.findById(decoded.userId).select('isBlocked tokenVersion');
+            const user = await User.findById(decoded.userId).select('isBlocked tokenVersion isVerified');
             if (user && !user.isBlocked) {
                 const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
                 const currentTokenVersion = user.tokenVersion || 0;

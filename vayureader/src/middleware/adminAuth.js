@@ -61,7 +61,7 @@ const authenticateAdmin = async (req, res, next) => {
 
         // Database verification: ensure admin exists and token session is still valid.
         const admin = await Admin.findById(decoded.adminId)
-            .select('name contact permissions tokenVersion');
+            .select('name contact permissions tokenVersion isVerified');
         if (!admin) {
             return response.unauthorized(res, 'Admin account no longer exists');
         }
@@ -70,6 +70,12 @@ const authenticateAdmin = async (req, res, next) => {
         const currentTokenVersion = admin.tokenVersion || 0;
         if (decodedTokenVersion !== currentTokenVersion) {
             return response.unauthorized(res, 'Session expired. Please login again.');
+        }
+
+        // Enforce security questions setup
+        const isSetupPath = req.path === '/security-setup' || req.originalUrl.includes('/recovery/setup') || req.path === '/setup';
+        if (!admin.isVerified && !isSetupPath) {
+            return response.forbidden(res, 'Security setup required for sub-admins.');
         }
 
         // Optional: Check if admin is disabled/suspended (if such a field exists)
@@ -161,7 +167,7 @@ const unifiedAuth = async (req, res, next) => {
             } else {
                 // Fix Zombie Admin: Validate admin exists in DB even for unifiedAuth
                 admin = await Admin.findById(decoded.adminId)
-                    .select('name contact permissions tokenVersion')
+                    .select('name contact permissions tokenVersion isVerified')
                     .lean();
                 if (admin) {
                     await redisClient.set(cacheKey, JSON.stringify(admin), { EX: 60 }); // Cache for 60s
@@ -176,6 +182,12 @@ const unifiedAuth = async (req, res, next) => {
             const currentTokenVersion = admin.tokenVersion || 0;
             if (decodedTokenVersion !== currentTokenVersion) {
                 return response.unauthorized(res, 'Session expired. Please login again.');
+            }
+
+            // Enforce security questions setup
+            const isSetupPath = req.path === '/security-setup' || req.originalUrl.includes('/recovery/setup') || req.path === '/setup';
+            if (!admin.isVerified && !isSetupPath) {
+                return response.forbidden(res, 'Security setup required.');
             }
 
             req.admin = {
@@ -204,7 +216,7 @@ const unifiedAuth = async (req, res, next) => {
                 user = JSON.parse(cachedUser);
             } else {
                 // Validate user still exists and is not blocked
-                user = await User.findById(decoded.userId).select('isBlocked tokenVersion').lean();
+                user = await User.findById(decoded.userId).select('isBlocked tokenVersion isVerified').lean();
                 if (user) {
                     await redisClient.set(cacheKey, JSON.stringify(user), { EX: 60 }); // Cache for 60s
                 }
@@ -221,6 +233,12 @@ const unifiedAuth = async (req, res, next) => {
             const currentTokenVersion = user.tokenVersion || 0;
             if (decodedTokenVersion !== currentTokenVersion) {
                 return response.unauthorized(res, 'Session expired. Please login again.');
+            }
+
+            // Enforce security questions setup
+            const isSetupPathUser = req.path === '/security-setup' || req.originalUrl.includes('/recovery/setup') || req.path === '/setup';
+            if (!user.isVerified && !isSetupPathUser) {
+                return response.forbidden(res, 'Security setup required.');
             }
 
             req.user = { userId: decoded.userId, phone_number: decoded.phone_number, tokenVersion: currentTokenVersion };

@@ -217,15 +217,14 @@ const uploadPdf = async (req, res, next) => {
         }
 
         // Security Check: Validate Magic Bytes (File Content)
-        const buffer = await fs.readFile(pdfFile.path);
-        const validPdf = await validateFileType(buffer, ALLOWED_TYPES.pdf);
+        const validPdf = await validateFileType(pdfFile.path, ALLOWED_TYPES.pdf);
         if (!validPdf.valid) {
             await fs.unlink(pdfFile.path).catch(() => { });
             return response.badRequest(res, `Invalid PDF file content. Detected: ${validPdf.type ? validPdf.type.mime : 'unknown'}`);
         }
 
         // Security: Cross-check extension vs actual content (catches .exe renamed to .pdf)
-        const extCheck = await validateExtensionMatchesContent(pdfFile.originalname, buffer);
+        const extCheck = await validateExtensionMatchesContent(pdfFile.originalname, pdfFile.path);
         if (!extCheck.valid) {
             await fs.unlink(pdfFile.path).catch(() => { });
             return response.badRequest(res, `Security Warning: ${extCheck.error}`);
@@ -303,15 +302,14 @@ const updatePdf = async (req, res, next) => {
             }
 
             // Security Check: Validate PDF magic bytes
-            const buffer = await fs.readFile(pdfFile.path);
-            const validPdf = await validateFileType(buffer, ALLOWED_TYPES.pdf);
+            const validPdf = await validateFileType(pdfFile.path, ALLOWED_TYPES.pdf);
             if (!validPdf.valid) {
                 await fs.unlink(pdfFile.path).catch(() => { });
                 return response.badRequest(res, `Invalid PDF file content. Detected: ${validPdf.type ? validPdf.type.mime : 'unknown'}`);
             }
 
             // Security: Cross-check extension vs actual content
-            const extCheck = await validateExtensionMatchesContent(pdfFile.originalname, buffer);
+            const extCheck = await validateExtensionMatchesContent(pdfFile.originalname, pdfFile.path);
             if (!extCheck.valid) {
                 await fs.unlink(pdfFile.path).catch(() => { });
                 return response.badRequest(res, `Security Warning: ${extCheck.error}`);

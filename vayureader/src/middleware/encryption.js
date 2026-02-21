@@ -20,6 +20,7 @@ const { redisClient } = require('../config/redis');
 const response = require('../utils/response');
 const fs = require('fs').promises;
 const crypto = require('crypto');
+const path = require('path');
 
 const MULTIPART_SIGNATURE_TTL_MS = 5 * 60 * 1000;
 const SIGNATURE_CLOCK_SKEW_MS = 60 * 1000;
@@ -141,6 +142,15 @@ const e2eeMiddleware = (req, res, next) => {
 const cleanupUploadedFile = async (req) => {
     if (req.file && req.file.path) {
         await fs.unlink(req.file.path).catch(() => { });
+        try {
+            const dirPath = path.dirname(req.file.path);
+            const files = await fs.readdir(dirPath);
+            if (files.length === 0) {
+                await fs.rmdir(dirPath);
+            }
+        } catch (e) {
+            // ignore
+        }
     }
 };
 
@@ -174,8 +184,13 @@ const verifyMultipartE2EESignature = async (req, res, next) => {
                 return response.badRequest(res, 'Missing file hash in signature. Upload rejected.');
             }
             try {
-                const fileBuffer = await fs.readFile(req.file.path);
-                const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+                const hash = await new Promise((resolve, reject) => {
+                    const hashStream = crypto.createHash('sha256');
+                    const fileStream = require('fs').createReadStream(req.file.path);
+                    fileStream.on('error', reject);
+                    hashStream.on('finish', () => resolve(hashStream.read().toString('hex')));
+                    fileStream.pipe(hashStream);
+                });
                 if (hash !== decrypted.fileHash) {
                     await cleanupUploadedFile(req);
                     return response.badRequest(res, 'File content mismatch. Upload rejected.');

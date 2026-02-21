@@ -280,7 +280,9 @@ const deleteSubAdmin = async (req, res, next) => {
             return response.notFound(res, 'Sub-admin not found');
         }
 
-
+        if (req.params.id === req.admin.adminId.toString()) {
+            return response.forbidden(res, 'You cannot delete your own admin account');
+        }
 
         await Admin.findByIdAndDelete(req.params.id);
 

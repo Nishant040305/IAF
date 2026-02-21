@@ -23,19 +23,19 @@ const ALLOWED_TYPES = {
  * Validates a file buffer against allowed MIME types.
  * Uses magic bytes for security instead of trusting headers.
  * 
- * @param {Buffer} buffer - File buffer to validate
+ * @param {string} filePath - Path to the file to validate
  * @param {string[]} allowedTypes - Array of allowed MIME types
  * @returns {Promise<{valid: boolean, type: Object|null, error: string|null}>}
  * 
  * @example
- * const result = await validateFileType(buffer, ALLOWED_TYPES.pdf);
+ * const result = await validateFileType(filePath, ALLOWED_TYPES.pdf);
  * if (!result.valid) {
  *   return res.status(400).json({ error: result.error });
  * }
  */
-const validateFileType = async (buffer, allowedTypes) => {
+const validateFileType = async (filePath, allowedTypes) => {
     try {
-        const type = await FileType.fromBuffer(buffer);
+        const type = await FileType.fromFile(filePath);
 
         if (!type) {
             return {
@@ -84,22 +84,22 @@ const generateSafeFilename = (originalName, detectedType, uuid) => {
 /**
  * Checks if a file is a PDF.
  * 
- * @param {Buffer} buffer - File buffer
+ * @param {string} filePath - Path to the file
  * @returns {Promise<boolean>}
  */
-const isPdf = async (buffer) => {
-    const result = await validateFileType(buffer, ALLOWED_TYPES.pdf);
+const isPdf = async (filePath) => {
+    const result = await validateFileType(filePath, ALLOWED_TYPES.pdf);
     return result.valid;
 };
 
 /**
  * Checks if a file is an image.
  * 
- * @param {Buffer} buffer - File buffer
+ * @param {string} filePath - Path to the file
  * @returns {Promise<boolean>}
  */
-const isImage = async (buffer) => {
-    const result = await validateFileType(buffer, ALLOWED_TYPES.image);
+const isImage = async (filePath) => {
+    const result = await validateFileType(filePath, ALLOWED_TYPES.image);
     return result.valid;
 };
 
@@ -108,12 +108,12 @@ const isImage = async (buffer) => {
  * Catches spoofed files (e.g., .exe renamed to .pdf).
  * 
  * @param {string} originalName - Original filename
- * @param {Buffer} buffer - File buffer
+ * @param {string} filePath - Path to the file
  * @returns {Promise<{valid: boolean, error: string|null, detectedType: Object|null}>}
  */
-const validateExtensionMatchesContent = async (originalName, buffer) => {
+const validateExtensionMatchesContent = async (originalName, filePath) => {
     const ext = path.extname(originalName).toLowerCase().replace('.', '');
-    const type = await FileType.fromBuffer(buffer);
+    const type = await FileType.fromFile(filePath);
 
     if (!type) {
         return { valid: false, error: 'Unable to determine actual file type from content', detectedType: null };
