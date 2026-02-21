@@ -19,6 +19,7 @@ const { decodeToken } = require('../services/jwt.service');
 const { redisClient } = require('../config/redis');
 const response = require('../utils/response');
 const fs = require('fs').promises;
+const crypto = require('crypto');
 
 const MULTIPART_SIGNATURE_TTL_MS = 5 * 60 * 1000;
 const SIGNATURE_CLOCK_SKEW_MS = 60 * 1000;
@@ -165,6 +166,27 @@ const verifyMultipartE2EESignature = async (req, res, next) => {
             await cleanupUploadedFile(req);
             return response.badRequest(res, 'Invalid E2EE security signature payload');
         }
+
+        // Verify file hash if a file is uploaded
+        if (req.file) {
+            if (!decrypted.fileHash) {
+                await cleanupUploadedFile(req);
+                return response.badRequest(res, 'Missing file hash in signature. Upload rejected.');
+            }
+            try {
+                const fileBuffer = await fs.readFile(req.file.path);
+                const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+                if (hash !== decrypted.fileHash) {
+                    await cleanupUploadedFile(req);
+                    return response.badRequest(res, 'File content mismatch. Upload rejected.');
+                }
+            } catch (err) {
+                await cleanupUploadedFile(req);
+                console.error('[E2EE] File hash verification failed:', err.message);
+                return response.badRequest(res, 'Failed to verify file integrity.');
+            }
+        }
+
 
         const ageMs = Date.now() - decrypted.timestamp;
         if (ageMs > MULTIPART_SIGNATURE_TTL_MS || ageMs < -SIGNATURE_CLOCK_SKEW_MS) {

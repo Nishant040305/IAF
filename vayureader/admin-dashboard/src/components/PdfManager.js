@@ -229,18 +229,41 @@ export default function PdfManager(props) {
     return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 18)}`;
   };
 
-  const attachMultipartE2EEMeta = async (formData) => {
+  const calculateFileHash = async (file) => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+      console.error('Failed to calculate file hash:', e);
+      return null;
+    }
+  };
+
+  const attachMultipartE2EEMeta = async (formData, fileToHash = null) => {
     const token = getAdminToken();
     if (!token) return;
 
     const key = await getSessionKey(token);
     if (!key) return;
 
-    const signaturePayload = JSON.stringify({
+    let fileHash = null;
+    if (fileToHash) {
+      fileHash = await calculateFileHash(fileToHash);
+    }
+
+    const payloadObj = {
       secureFileMatch: true,
       timestamp: Date.now(),
       nonce: generateE2EENonce()
-    });
+    };
+
+    if (fileHash) {
+      payloadObj.fileHash = fileHash;
+    }
+
+    const signaturePayload = JSON.stringify(payloadObj);
 
     const encryptedSignature = await encrypt(signaturePayload, key);
     formData.append('_e2eeMeta', encryptedSignature);
@@ -273,7 +296,7 @@ export default function PdfManager(props) {
 
     // Frontend Security: Attach E2EE signature for multipart validation
     try {
-      await attachMultipartE2EEMeta(formData);
+      await attachMultipartE2EEMeta(formData, file);
     } catch (err) {
       console.error('[E2EE] Failed to generate multipart signature', err);
     }
@@ -323,7 +346,7 @@ export default function PdfManager(props) {
 
     // Frontend Security: Attach E2EE signature for multipart validation
     try {
-      await attachMultipartE2EEMeta(formData);
+      await attachMultipartE2EEMeta(formData, editFile);
     } catch (err) {
       console.error('[E2EE] Failed to generate multipart signature', err);
     }
