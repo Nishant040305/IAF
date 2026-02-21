@@ -16,7 +16,13 @@
 
 const { encrypt, decrypt, deriveKey } = require('../services/encryption.service');
 const { decodeToken } = require('../services/jwt.service');
+const { redisClient } = require('../config/redis');
 const response = require('../utils/response');
+const fs = require('fs').promises;
+
+const MULTIPART_SIGNATURE_TTL_MS = 5 * 60 * 1000;
+const SIGNATURE_CLOCK_SKEW_MS = 60 * 1000;
+const NONCE_REGEX = /^[A-Za-z0-9_-]{16,128}$/;
 
 // =============================================================================
 // PATHS TO EXCLUDE FROM ENCRYPTION
@@ -131,31 +137,57 @@ const e2eeMiddleware = (req, res, next) => {
     next();
 };
 
-const verifyMultipartE2EESignature = (req, res, next) => {
+const cleanupUploadedFile = async (req) => {
+    if (req.file && req.file.path) {
+        await fs.unlink(req.file.path).catch(() => { });
+    }
+};
+
+const verifyMultipartE2EESignature = async (req, res, next) => {
     try {
         if (!req._e2eeIdentity) return next();
 
         const signature = req.body._e2eeMeta;
         if (!signature) {
+            await cleanupUploadedFile(req);
             return response.badRequest(res, 'Missing E2EE security signature for file upload');
         }
 
         const key = deriveKey(req._e2eeIdentity.id, req._e2eeIdentity.contact, req._e2eeIdentity.tokenVersion);
         const decrypted = JSON.parse(decrypt(signature, key));
 
-        if (!decrypted.secureFileMatch || !decrypted.timestamp) {
+        if (
+            decrypted.secureFileMatch !== true ||
+            !Number.isInteger(decrypted.timestamp) ||
+            typeof decrypted.nonce !== 'string' ||
+            !NONCE_REGEX.test(decrypted.nonce)
+        ) {
+            await cleanupUploadedFile(req);
             return response.badRequest(res, 'Invalid E2EE security signature payload');
         }
 
         const ageMs = Date.now() - decrypted.timestamp;
-        if (ageMs > 5 * 60 * 1000 || ageMs < -60000) {
+        if (ageMs > MULTIPART_SIGNATURE_TTL_MS || ageMs < -SIGNATURE_CLOCK_SKEW_MS) {
+            await cleanupUploadedFile(req);
             return response.badRequest(res, 'E2EE signature expired (replay attack protection)');
+        }
+
+        const nonceKey = `e2ee:multipart:nonce:${req._e2eeIdentity.id}:${req._e2eeIdentity.tokenVersion}:${decrypted.nonce}`;
+        const nonceSetResult = await redisClient.set(nonceKey, '1', {
+            EX: Math.ceil(MULTIPART_SIGNATURE_TTL_MS / 1000),
+            NX: true
+        });
+
+        if (nonceSetResult !== 'OK') {
+            await cleanupUploadedFile(req);
+            return response.badRequest(res, 'E2EE signature replay detected. Upload rejected.');
         }
 
         delete req.body._e2eeMeta;
         next();
     } catch (err) {
-        console.error('[E2EE] Multipart signature decryption failed:', err.message);
+        await cleanupUploadedFile(req);
+        console.error('[E2EE] Multipart signature validation failed:', err.message);
         return response.badRequest(res, 'E2EE signature validation failed. Upload rejected.');
     }
 };

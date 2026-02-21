@@ -217,6 +217,35 @@ export default function PdfManager(props) {
     return expectedTypes.includes(ext);
   };
 
+  const generateE2EENonce = () => {
+    if (globalThis.crypto?.randomUUID) {
+      return globalThis.crypto.randomUUID().replace(/-/g, '');
+    }
+    if (globalThis.crypto?.getRandomValues) {
+      const bytes = new Uint8Array(16);
+      globalThis.crypto.getRandomValues(bytes);
+      return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 18)}`;
+  };
+
+  const attachMultipartE2EEMeta = async (formData) => {
+    const token = getAdminToken();
+    if (!token) return;
+
+    const key = await getSessionKey(token);
+    if (!key) return;
+
+    const signaturePayload = JSON.stringify({
+      secureFileMatch: true,
+      timestamp: Date.now(),
+      nonce: generateE2EENonce()
+    });
+
+    const encryptedSignature = await encrypt(signaturePayload, key);
+    formData.append('_e2eeMeta', encryptedSignature);
+  };
+
   const handleUpload = async () => {
     const usedCategory = showNewCategoryInput && newCategory.trim() ? newCategory.trim() : category.trim();
     if (!file || !title.trim() || !usedCategory) return addNotification('Please fill in all required fields (File, Title, Category).', 'error');
@@ -244,18 +273,7 @@ export default function PdfManager(props) {
 
     // Frontend Security: Attach E2EE signature for multipart validation
     try {
-      const token = getAdminToken();
-      if (token) {
-        const key = await getSessionKey(token);
-        if (key) {
-          const signaturePayload = JSON.stringify({
-            secureFileMatch: true,
-            timestamp: Date.now()
-          });
-          const encryptedSignature = await encrypt(signaturePayload, key);
-          formData.append('_e2eeMeta', encryptedSignature);
-        }
-      }
+      await attachMultipartE2EEMeta(formData);
     } catch (err) {
       console.error('[E2EE] Failed to generate multipart signature', err);
     }
@@ -305,18 +323,7 @@ export default function PdfManager(props) {
 
     // Frontend Security: Attach E2EE signature for multipart validation
     try {
-      const token = getAdminToken();
-      if (token) {
-        const key = await getSessionKey(token);
-        if (key) {
-          const signaturePayload = JSON.stringify({
-            secureFileMatch: true,
-            timestamp: Date.now()
-          });
-          const encryptedSignature = await encrypt(signaturePayload, key);
-          formData.append('_e2eeMeta', encryptedSignature);
-        }
-      }
+      await attachMultipartE2EEMeta(formData);
     } catch (err) {
       console.error('[E2EE] Failed to generate multipart signature', err);
     }
