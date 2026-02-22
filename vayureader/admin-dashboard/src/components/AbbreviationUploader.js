@@ -28,7 +28,8 @@ const CancelIcon = () => (
   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
 );
 
-export default function AbbreviationUploader() {
+export default function AbbreviationUploader({ permissions = [] }) {
+  const hasManagePerm = permissions.includes('manage_abbreviations');
   const [abbreviation, setAbbreviation] = useState('');
   const [fullForm, setFullForm] = useState('');
   const [message, setMessage] = useState('');
@@ -334,73 +335,77 @@ export default function AbbreviationUploader() {
       )}
 
       {/* Add Single Entry */}
-      <div style={styles.card}>
-        <h3 style={styles.cardTitle}>Add Single Entry</h3>
-        <div style={styles.row}>
-          <input
-            placeholder="Abbreviation (e.g., AI)"
-            value={abbreviation}
-            onChange={e => setAbbreviation(e.target.value)}
-            style={styles.input}
-            disabled={loading || addLoading}
-          />
-          <input
-            placeholder="Full Form (e.g., Artificial Intelligence)"
-            value={fullForm}
-            onChange={e => setFullForm(e.target.value)}
-            style={{ ...styles.input, flex: 2 }}
-            disabled={loading || addLoading}
-          />
-          <button style={styles.primaryBtn} onClick={handleSubmit} disabled={loading || addLoading}>
-            {addLoading ? 'Adding...' : 'Add'}
-          </button>
+      {hasManagePerm && (
+        <div style={styles.card}>
+          <h3 style={styles.cardTitle}>Add Single Entry</h3>
+          <div style={styles.row}>
+            <input
+              placeholder="Abbreviation (e.g., AI)"
+              value={abbreviation}
+              onChange={e => setAbbreviation(e.target.value)}
+              style={styles.input}
+              disabled={loading || addLoading}
+            />
+            <input
+              placeholder="Full Form (e.g., Artificial Intelligence)"
+              value={fullForm}
+              onChange={e => setFullForm(e.target.value)}
+              style={{ ...styles.input, flex: 2 }}
+              disabled={loading || addLoading}
+            />
+            <button style={styles.primaryBtn} onClick={handleSubmit} disabled={loading || addLoading}>
+              {addLoading ? 'Adding...' : 'Add'}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Bulk Upload */}
-      <div style={styles.card}>
-        <h3 style={styles.cardTitle}>Bulk Upload</h3>
+      {hasManagePerm && (
+        <div style={styles.card}>
+          <h3 style={styles.cardTitle}>Bulk Upload</h3>
 
-        {stagedData ? (
-          <div style={styles.stagedBox}>
-            <div style={styles.stagedInfo}>
-              <strong>📁 {stagedFileName}</strong>
-              <span style={styles.stagedCount}>{stagedData.length} entries ready</span>
+          {stagedData ? (
+            <div style={styles.stagedBox}>
+              <div style={styles.stagedInfo}>
+                <strong>📁 {stagedFileName}</strong>
+                <span style={styles.stagedCount}>{stagedData.length} entries ready</span>
+              </div>
+              <div style={styles.stagedPreview}>
+                {stagedData.slice(0, 3).map((item, i) => (
+                  <div key={i} style={styles.previewItem}>{item.abbreviation} → {item.fullForm}</div>
+                ))}
+                {stagedData.length > 3 && <div style={styles.previewMore}>...and {stagedData.length - 3} more</div>}
+              </div>
+              <div style={styles.stagedActions}>
+                <button style={styles.successBtn} onClick={handleConfirmUpload} disabled={loading}>
+                  {loading ? 'Uploading...' : 'Confirm Upload'}
+                </button>
+                <button style={styles.cancelBtn} onClick={handleCancelUpload} disabled={loading}>
+                  Cancel
+                </button>
+              </div>
             </div>
-            <div style={styles.stagedPreview}>
-              {stagedData.slice(0, 3).map((item, i) => (
-                <div key={i} style={styles.previewItem}>{item.abbreviation} → {item.fullForm}</div>
-              ))}
-              {stagedData.length > 3 && <div style={styles.previewMore}>...and {stagedData.length - 3} more</div>}
+          ) : (
+            <div style={styles.uploadGrid}>
+              <label style={styles.uploadBox}>
+                <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="#94a3b8" style={{ marginBottom: 4 }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                <p style={styles.label}>CSV File</p>
+                <input type="file" accept=".csv" ref={csvInputRef} onChange={handleCSVSelect} disabled={loading} style={{ display: 'none' }} />
+                <div style={styles.uploadBtn}>Choose CSV File</div>
+                <small style={styles.hint}>Format: abbreviation,fullForm</small>
+              </label>
+              <label style={styles.uploadBox}>
+                <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="#94a3b8" style={{ marginBottom: 4 }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                <p style={styles.label}>JSON File</p>
+                <input type="file" accept=".json" ref={jsonInputRef} onChange={handleJSONSelect} disabled={loading} style={{ display: 'none' }} />
+                <div style={styles.uploadBtn}>Choose JSON File</div>
+                <small style={styles.hint}>[{`{"abbreviation":"AI","fullForm":"..."}`}]</small>
+              </label>
             </div>
-            <div style={styles.stagedActions}>
-              <button style={styles.successBtn} onClick={handleConfirmUpload} disabled={loading}>
-                {loading ? 'Uploading...' : 'Confirm Upload'}
-              </button>
-              <button style={styles.cancelBtn} onClick={handleCancelUpload} disabled={loading}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={styles.uploadGrid}>
-            <label style={styles.uploadBox}>
-              <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="#94a3b8" style={{ marginBottom: 4 }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-              <p style={styles.label}>CSV File</p>
-              <input type="file" accept=".csv" ref={csvInputRef} onChange={handleCSVSelect} disabled={loading} style={{ display: 'none' }} />
-              <div style={styles.uploadBtn}>Choose CSV File</div>
-              <small style={styles.hint}>Format: abbreviation,fullForm</small>
-            </label>
-            <label style={styles.uploadBox}>
-              <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="#94a3b8" style={{ marginBottom: 4 }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-              <p style={styles.label}>JSON File</p>
-              <input type="file" accept=".json" ref={jsonInputRef} onChange={handleJSONSelect} disabled={loading} style={{ display: 'none' }} />
-              <div style={styles.uploadBtn}>Choose JSON File</div>
-              <small style={styles.hint}>[{`{"abbreviation":"AI","fullForm":"..."}`}]</small>
-            </label>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Export */}
       <div style={styles.card}>
@@ -428,14 +433,14 @@ export default function AbbreviationUploader() {
             <tr>
               <th style={styles.th}>Abbreviation</th>
               <th style={styles.th}>Full Form</th>
-              <th style={styles.th}>Actions</th>
+              {hasManagePerm && <th style={styles.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {isFetching && abbreviations.length === 0 ? (
-              <tr><td colSpan={3} style={styles.emptyCell}>Loading...</td></tr>
+              <tr><td colSpan={hasManagePerm ? 3 : 2} style={styles.emptyCell}>Loading...</td></tr>
             ) : paginatedAbbreviations.length === 0 ? (
-              <tr><td colSpan={3} style={styles.emptyCell}>No abbreviations found</td></tr>
+              <tr><td colSpan={hasManagePerm ? 3 : 2} style={styles.emptyCell}>No abbreviations found</td></tr>
             ) : paginatedAbbreviations.map((abbr, idx) => (
               <tr key={abbr._id} style={idx % 2 === 0 ? styles.zebra : {}}>
                 <td style={styles.td}>
@@ -448,21 +453,23 @@ export default function AbbreviationUploader() {
                     <input value={editFullForm} onChange={e => setEditFullForm(e.target.value)} style={styles.input} />
                   ) : abbr.fullForm}
                 </td>
-                <td style={styles.td}>
-                  <div style={styles.actionGroup}>
-                    {editingId === abbr._id ? (
-                      <>
-                        <button style={styles.saveBtn} onClick={handleUpdate}><SaveIcon /> Save</button>
-                        <button style={styles.cancelBtn} onClick={() => setEditingId(null)}><CancelIcon /> Cancel</button>
-                      </>
-                    ) : (
-                      <>
-                        <button style={styles.editBtn} onClick={() => handleEdit(abbr)}><EditIcon /> Edit</button>
-                        <button style={styles.deleteBtn} onClick={() => handleDelete(abbr._id)}><DeleteIcon /> Delete</button>
-                      </>
-                    )}
-                  </div>
-                </td>
+                {hasManagePerm && (
+                  <td style={styles.td}>
+                    <div style={styles.actionGroup}>
+                      {editingId === abbr._id ? (
+                        <>
+                          <button style={styles.saveBtn} onClick={handleUpdate}><SaveIcon /> Save</button>
+                          <button style={styles.cancelBtn} onClick={() => setEditingId(null)}><CancelIcon /> Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <button style={styles.editBtn} onClick={() => handleEdit(abbr)}><EditIcon /> Edit</button>
+                          <button style={styles.deleteBtn} onClick={() => handleDelete(abbr._id)}><DeleteIcon /> Delete</button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

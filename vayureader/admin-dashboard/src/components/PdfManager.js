@@ -218,12 +218,12 @@ export default function PdfManager(props) {
   };
 
   const generateE2EENonce = () => {
-    if (globalThis.crypto?.randomUUID) {
-      return globalThis.crypto.randomUUID().replace(/-/g, '');
+    if (window.crypto?.randomUUID) {
+      return window.crypto.randomUUID().replace(/-/g, '');
     }
-    if (globalThis.crypto?.getRandomValues) {
+    if (window.crypto?.getRandomValues) {
       const bytes = new Uint8Array(16);
-      globalThis.crypto.getRandomValues(bytes);
+      window.crypto.getRandomValues(bytes);
       return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
     }
     return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 18)}`;
@@ -404,12 +404,14 @@ export default function PdfManager(props) {
     setFile(selectedFile);
   };
 
+  const hasManagePerm = props.permissions?.includes('manage_pdfs');
+
   return (
     <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
       <style>{`
         .pdf-manager-container {
           display: grid;
-          grid-template-columns: 400px 1fr;
+          grid-template-columns: ${hasManagePerm ? '400px 1fr' : '1fr'};
           gap: 2rem;
           align-items: start;
         }
@@ -791,120 +793,122 @@ export default function PdfManager(props) {
 
       <div className="pdf-manager-container">
         {/* Upload Section */}
-        <div className="upload-card">
-          <div className="upload-header">
-            <FileText size={24} color="#4f46e5" />
-            <h2 className="upload-title">Upload PDF</h2>
-          </div>
+        {hasManagePerm && (
+          <div className="upload-card">
+            <div className="upload-header">
+              <FileText size={24} color="#4f46e5" />
+              <h2 className="upload-title">Upload PDF</h2>
+            </div>
 
-          {/* Drop Zone */}
-          <div
-            className={`drop-zone ${isDragOver ? 'drag-over' : ''} ${file ? 'file-selected' : ''}`}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <input
-              type="file"
-              accept="application/pdf"
-              onChange={handleFileSelect}
-              style={{ display: 'none' }}
-              ref={fileInputRef}
-            />
-            {file ? (
-              <>
-                <CheckCircle className="drop-zone-icon" size={48} />
-                <div className="file-name">{file.name}</div>
-                <p className="drop-zone-text">Click or drag to replace</p>
-              </>
-            ) : (
-              <>
-                <UploadCloud className="drop-zone-icon" size={48} />
-                <p style={{ margin: 0, fontWeight: 500, color: '#374151' }}>
-                  Click to upload or drag PDF
-                </p>
-                <p className="drop-zone-text">PDF files only</p>
-              </>
-            )}
-          </div>
-
-          {/* Form Fields */}
-          <div className="form-group">
-            <label className="form-label">Title *</label>
-            <input
-              type="text"
-              placeholder="Enter PDF title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="form-input"
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Description</label>
-            <textarea
-              placeholder="Enter description (optional)"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="form-input form-textarea"
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Category *</label>
-            <select
-              value={showNewCategoryInput ? '__new__' : category}
-              onChange={handleCategoryChange}
-              className="form-input"
+            {/* Drop Zone */}
+            <div
+              className={`drop-zone ${isDragOver ? 'drag-over' : ''} ${file ? 'file-selected' : ''}`}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
             >
-              <option value="">Select Category</option>
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-              <option value="__new__">+ New Category</option>
-            </select>
-          </div>
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+                ref={fileInputRef}
+              />
+              {file ? (
+                <>
+                  <CheckCircle className="drop-zone-icon" size={48} />
+                  <div className="file-name">{file.name}</div>
+                  <p className="drop-zone-text">Click or drag to replace</p>
+                </>
+              ) : (
+                <>
+                  <UploadCloud className="drop-zone-icon" size={48} />
+                  <p style={{ margin: 0, fontWeight: 500, color: '#374151' }}>
+                    Click to upload or drag PDF
+                  </p>
+                  <p className="drop-zone-text">PDF files only</p>
+                </>
+              )}
+            </div>
 
-          <AnimatePresence>
-            {showNewCategoryInput && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="form-group"
+            {/* Form Fields */}
+            <div className="form-group">
+              <label className="form-label">Title *</label>
+              <input
+                type="text"
+                placeholder="Enter PDF title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="form-input"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Description</label>
+              <textarea
+                placeholder="Enter description (optional)"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                className="form-input form-textarea"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Category *</label>
+              <select
+                value={showNewCategoryInput ? '__new__' : category}
+                onChange={handleCategoryChange}
+                className="form-input"
               >
-                <div className="category-input-group">
-                  <input
-                    placeholder="New category name"
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    className="form-input"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddNewCategory();
-                    }}
-                  />
-                  <button
-                    className="btn-add-category"
-                    onClick={handleAddNewCategory}
-                    title="Add Category"
-                  >
-                    <Plus size={18} />
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                <option value="">Select Category</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+                <option value="__new__">+ New Category</option>
+              </select>
+            </div>
 
-          <button
-            className="btn-upload"
-            onClick={handleUpload}
-            disabled={!file || !title || (showNewCategoryInput ? !newCategory.trim() : !category)}
-          >
-            <UploadCloud size={18} />
-            Upload PDF
-          </button>
-        </div>
+            <AnimatePresence>
+              {showNewCategoryInput && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="form-group"
+                >
+                  <div className="category-input-group">
+                    <input
+                      placeholder="New category name"
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      className="form-input"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddNewCategory();
+                      }}
+                    />
+                    <button
+                      className="btn-add-category"
+                      onClick={handleAddNewCategory}
+                      title="Add Category"
+                    >
+                      <Plus size={18} />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <button
+              className="btn-upload"
+              onClick={handleUpload}
+              disabled={!file || !title || (showNewCategoryInput ? !newCategory.trim() : !category)}
+            >
+              <UploadCloud size={18} />
+              Upload PDF
+            </button>
+          </div>
+        )}
 
         {/* PDF List Section */}
         <div className="list-card">
@@ -1013,13 +1017,15 @@ export default function PdfManager(props) {
                             </>
                           ) : (
                             <>
-                              <button
-                                className="btn-icon"
-                                onClick={() => startEditing(pdf)}
-                                title="Edit"
-                              >
-                                <Edit size={18} />
-                              </button>
+                              {hasManagePerm && (
+                                <button
+                                  className="btn-icon"
+                                  onClick={() => startEditing(pdf)}
+                                  title="Edit"
+                                >
+                                  <Edit size={18} />
+                                </button>
+                              )}
                               <button
                                 className="btn-icon primary"
                                 onClick={() => window.open(`${api.defaults.baseURL}${pdf.pdfUrl}`, '_blank')}
@@ -1027,13 +1033,15 @@ export default function PdfManager(props) {
                               >
                                 <Eye size={18} />
                               </button>
-                              <button
-                                className="btn-icon danger"
-                                onClick={() => handleDeletePdf(pdf._id)}
-                                title="Delete"
-                              >
-                                <Trash2 size={18} />
-                              </button>
+                              {hasManagePerm && (
+                                <button
+                                  className="btn-icon danger"
+                                  onClick={() => handleDeletePdf(pdf._id)}
+                                  title="Delete"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              )}
                             </>
                           )}
                         </div>

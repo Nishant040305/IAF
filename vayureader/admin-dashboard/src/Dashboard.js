@@ -9,14 +9,7 @@ import AdminAuditLogs from './components/AdminAuditLogs';
 import UserAuditLogs from './components/UserAuditLogs';
 
 export default function Dashboard({ user, permissions = [], onLogout }) {
-  // Set initial view based on first permission in JWT claims
   const getInitialView = () => {
-    if (permissions.includes('manage_pdfs')) return 'pdf';
-    if (permissions.includes('manage_dictionary')) return 'dictionary';
-    if (permissions.includes('manage_abbreviations')) return 'abbreviation';
-    if (permissions.includes('manage_admins')) return 'admins';
-    if (permissions.includes('view_audit')) return 'adminAudit';
-    if (permissions.includes('view_user_audit')) return 'userAudit';
     return 'pdf';
   };
 
@@ -33,9 +26,9 @@ export default function Dashboard({ user, permissions = [], onLogout }) {
 
   useEffect(() => {
     const canAccessCurrentView = (
-      (view === 'pdf' && permissions.includes('manage_pdfs')) ||
-      (view === 'dictionary' && permissions.includes('manage_dictionary')) ||
-      (view === 'abbreviation' && permissions.includes('manage_abbreviations')) ||
+      view === 'pdf' ||
+      view === 'dictionary' ||
+      view === 'abbreviation' ||
       (view === 'admins' && permissions.includes('manage_admins')) ||
       (view === 'adminAudit' && permissions.includes('view_audit')) ||
       (view === 'userAudit' && permissions.includes('view_user_audit'))
@@ -93,15 +86,15 @@ export default function Dashboard({ user, permissions = [], onLogout }) {
   const renderView = () => {
     switch (view) {
       case 'pdf':
-        return permissions.includes('manage_pdfs') ?
-          <PdfManager
-            targetPdfId={pdfToHighlight}
-            onClearTarget={() => setPdfToHighlight(null)}
-          /> : <NoAccess />;
+        return <PdfManager
+          targetPdfId={pdfToHighlight}
+          onClearTarget={() => setPdfToHighlight(null)}
+          permissions={permissions}
+        />;
       case 'dictionary':
-        return permissions.includes('manage_dictionary') ? <DictionaryManager /> : <NoAccess />;
+        return <DictionaryManager permissions={permissions} />;
       case 'abbreviation':
-        return permissions.includes('manage_abbreviations') ? <AbbreviationUploader /> : <NoAccess />;
+        return <AbbreviationUploader permissions={permissions} />;
       case 'admins':
         return permissions.includes('manage_admins') ? <AdminManager /> : <NoAccess />;
       case 'adminAudit':

@@ -15,16 +15,16 @@ import {
 import './Sidebar.css';
 
 const MENU_ITEMS = [
-    { key: 'pdf', label: 'PDF Manager', icon: FileText, permission: 'manage_pdfs' },
-    { key: 'dictionary', label: 'Dictionary', icon: Book, permission: 'manage_dictionary' },
-    { key: 'abbreviation', label: 'Abbreviations', icon: Type, permission: 'manage_abbreviations' },
+    { key: 'pdf', label: 'PDF Manager', icon: FileText },
+    { key: 'dictionary', label: 'Dictionary', icon: Book },
+    { key: 'abbreviation', label: 'Abbreviations', icon: Type },
     { key: 'admins', label: 'Admins', icon: Users, permission: 'manage_admins' },
     { key: 'adminAudit', label: 'Admin Audit', icon: ClipboardList, permission: 'view_audit' },
     { key: 'userAudit', label: 'User Audit', icon: Activity, permission: 'view_user_audit' },
 ];
 
 export default function Sidebar({ currentView, setView, user, permissions = [], onLogout, isCollapsed, onToggle }) {
-    const visibleItems = MENU_ITEMS.filter((item) => permissions.includes(item.permission));
+    const visibleItems = MENU_ITEMS.filter((item) => !item.permission || permissions.includes(item.permission));
 
     return (
         <motion.div

@@ -28,7 +28,8 @@ const CancelIcon = () => (
   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
 );
 
-export default function DictionaryUploader() {
+export default function DictionaryUploader({ permissions = [] }) {
+  const hasManagePerm = permissions.includes('manage_dictionary');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info');
   const [loading, setLoading] = useState(false); // For actions
@@ -392,69 +393,73 @@ export default function DictionaryUploader() {
       )}
 
       {/* Add Single Entry */}
-      <div style={styles.card}>
-        <h3 style={styles.cardTitle}>Add Single Word</h3>
-        <div style={styles.formGrid}>
-          <input placeholder="Word" value={newWord} onChange={e => setNewWord(e.target.value)} style={styles.input} disabled={loading} />
-          <select value={newPartOfSpeech} onChange={e => setNewPartOfSpeech(e.target.value)} style={styles.input} disabled={loading}>
-            <option value="noun">Noun</option>
-            <option value="verb">Verb</option>
-            <option value="adjective">Adjective</option>
-            <option value="adverb">Adverb</option>
-          </select>
-          <input placeholder="Definition" value={newDefinition} onChange={e => setNewDefinition(e.target.value)} style={{ ...styles.input, gridColumn: 'span 2' }} disabled={loading} />
-          <input placeholder="Synonyms (comma separated)" value={newSynonyms} onChange={e => setNewSynonyms(e.target.value)} style={styles.input} disabled={loading} />
-          <input placeholder="Antonyms (comma separated)" value={newAntonyms} onChange={e => setNewAntonyms(e.target.value)} style={styles.input} disabled={loading} />
+      {hasManagePerm && (
+        <div style={styles.card}>
+          <h3 style={styles.cardTitle}>Add Single Word</h3>
+          <div style={styles.formGrid}>
+            <input placeholder="Word" value={newWord} onChange={e => setNewWord(e.target.value)} style={styles.input} disabled={loading} />
+            <select value={newPartOfSpeech} onChange={e => setNewPartOfSpeech(e.target.value)} style={styles.input} disabled={loading}>
+              <option value="noun">Noun</option>
+              <option value="verb">Verb</option>
+              <option value="adjective">Adjective</option>
+              <option value="adverb">Adverb</option>
+            </select>
+            <input placeholder="Definition" value={newDefinition} onChange={e => setNewDefinition(e.target.value)} style={{ ...styles.input, gridColumn: 'span 2' }} disabled={loading} />
+            <input placeholder="Synonyms (comma separated)" value={newSynonyms} onChange={e => setNewSynonyms(e.target.value)} style={styles.input} disabled={loading} />
+            <input placeholder="Antonyms (comma separated)" value={newAntonyms} onChange={e => setNewAntonyms(e.target.value)} style={styles.input} disabled={loading} />
+          </div>
+          <button style={styles.primaryBtn} onClick={handleAddSingle} disabled={loading}>
+            {loading ? 'Adding...' : 'Add Word'}
+          </button>
         </div>
-        <button style={styles.primaryBtn} onClick={handleAddSingle} disabled={loading}>
-          {loading ? 'Adding...' : 'Add Word'}
-        </button>
-      </div>
+      )}
 
       {/* Bulk Upload */}
-      <div style={styles.card}>
-        <h3 style={styles.cardTitle}>Bulk Upload</h3>
+      {hasManagePerm && (
+        <div style={styles.card}>
+          <h3 style={styles.cardTitle}>Bulk Upload</h3>
 
-        {stagedData ? (
-          <div style={styles.stagedBox}>
-            <div style={styles.stagedInfo}>
-              <strong>📁 {stagedFileName}</strong>
-              <span style={styles.stagedCount}>{stagedEntryCount} words ready</span>
+          {stagedData ? (
+            <div style={styles.stagedBox}>
+              <div style={styles.stagedInfo}>
+                <strong>📁 {stagedFileName}</strong>
+                <span style={styles.stagedCount}>{stagedEntryCount} words ready</span>
+              </div>
+              <div style={styles.stagedPreview}>
+                {Object.keys(stagedData).slice(0, 3).map((word, i) => (
+                  <div key={i} style={styles.previewItem}>{word}</div>
+                ))}
+                {stagedEntryCount > 3 && <div style={styles.previewMore}>...and {stagedEntryCount - 3} more</div>}
+              </div>
+              <div style={styles.stagedActions}>
+                <button style={styles.successBtn} onClick={handleConfirmUpload} disabled={loading}>
+                  {loading ? 'Uploading...' : 'Confirm Upload'}
+                </button>
+                <button style={styles.cancelBtn} onClick={handleCancelUpload} disabled={loading}>
+                  Cancel
+                </button>
+              </div>
             </div>
-            <div style={styles.stagedPreview}>
-              {Object.keys(stagedData).slice(0, 3).map((word, i) => (
-                <div key={i} style={styles.previewItem}>{word}</div>
-              ))}
-              {stagedEntryCount > 3 && <div style={styles.previewMore}>...and {stagedEntryCount - 3} more</div>}
+          ) : (
+            <div style={styles.uploadGrid}>
+              <label style={styles.uploadBox}>
+                <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="#94a3b8" style={{ marginBottom: 4 }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                <p style={styles.label}>CSV File</p>
+                <input type="file" accept=".csv" ref={csvInputRef} onChange={handleCSVSelect} disabled={loading} style={{ display: 'none' }} />
+                <div style={styles.uploadBtn}>Choose CSV File</div>
+                <small style={styles.hint}>word,partOfSpeech,definition,synonyms,antonyms</small>
+              </label>
+              <label style={styles.uploadBox}>
+                <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="#94a3b8" style={{ marginBottom: 4 }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                <p style={styles.label}>JSON File</p>
+                <input type="file" accept=".json" ref={jsonInputRef} onChange={handleJSONSelect} disabled={loading} style={{ display: 'none' }} />
+                <div style={styles.uploadBtn}>Choose JSON File</div>
+                <small style={styles.hint}>{`{"WORD": {MEANINGS: [...]}}`}</small>
+              </label>
             </div>
-            <div style={styles.stagedActions}>
-              <button style={styles.successBtn} onClick={handleConfirmUpload} disabled={loading}>
-                {loading ? 'Uploading...' : 'Confirm Upload'}
-              </button>
-              <button style={styles.cancelBtn} onClick={handleCancelUpload} disabled={loading}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={styles.uploadGrid}>
-            <label style={styles.uploadBox}>
-              <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="#94a3b8" style={{ marginBottom: 4 }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-              <p style={styles.label}>CSV File</p>
-              <input type="file" accept=".csv" ref={csvInputRef} onChange={handleCSVSelect} disabled={loading} style={{ display: 'none' }} />
-              <div style={styles.uploadBtn}>Choose CSV File</div>
-              <small style={styles.hint}>word,partOfSpeech,definition,synonyms,antonyms</small>
-            </label>
-            <label style={styles.uploadBox}>
-              <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="#94a3b8" style={{ marginBottom: 4 }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-              <p style={styles.label}>JSON File</p>
-              <input type="file" accept=".json" ref={jsonInputRef} onChange={handleJSONSelect} disabled={loading} style={{ display: 'none' }} />
-              <div style={styles.uploadBtn}>Choose JSON File</div>
-              <small style={styles.hint}>{`{"WORD": {MEANINGS: [...]}}`}</small>
-            </label>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Export */}
       <div style={styles.card}>
@@ -483,12 +488,12 @@ export default function DictionaryUploader() {
               <th style={styles.th}>Meaning</th>
               <th style={styles.th}>Synonyms</th>
               <th style={styles.th}>Antonyms</th>
-              <th style={styles.th}>Actions</th>
+              {hasManagePerm && <th style={styles.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {paginatedResults.length === 0 ? (
-              <tr><td colSpan={5} style={styles.emptyCell}>{isFetching ? 'Searching...' : 'No results found. Try searching.'}</td></tr>
+              <tr><td colSpan={hasManagePerm ? 5 : 4} style={styles.emptyCell}>{isFetching ? 'Searching...' : 'No results found. Try searching.'}</td></tr>
             ) : paginatedResults.map((wordData, idx) => (
               <tr key={wordData._id} style={idx % 2 === 0 ? styles.zebra : {}}>
                 <td style={styles.td}>
@@ -503,21 +508,23 @@ export default function DictionaryUploader() {
                 <td style={styles.td}>
                   {editingId === wordData._id ? <input value={editAntonyms} onChange={e => setEditAntonyms(e.target.value)} style={styles.input} /> : (wordData.antonyms || []).join(', ')}
                 </td>
-                <td style={styles.td}>
-                  <div style={styles.actionGroup}>
-                    {editingId === wordData._id ? (
-                      <>
-                        <button style={styles.saveBtn} onClick={handleUpdate}><SaveIcon /> Save</button>
-                        <button style={styles.cancelBtn} onClick={() => setEditingId(null)}><CancelIcon /> Cancel</button>
-                      </>
-                    ) : (
-                      <>
-                        <button style={styles.editBtn} onClick={() => handleEdit(wordData)}><EditIcon /> Edit</button>
-                        <button style={styles.deleteBtn} onClick={() => handleDelete(wordData._id)}><DeleteIcon /> Delete</button>
-                      </>
-                    )}
-                  </div>
-                </td>
+                {hasManagePerm && (
+                  <td style={styles.td}>
+                    <div style={styles.actionGroup}>
+                      {editingId === wordData._id ? (
+                        <>
+                          <button style={styles.saveBtn} onClick={handleUpdate}><SaveIcon /> Save</button>
+                          <button style={styles.cancelBtn} onClick={() => setEditingId(null)}><CancelIcon /> Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <button style={styles.editBtn} onClick={() => handleEdit(wordData)}><EditIcon /> Edit</button>
+                          <button style={styles.deleteBtn} onClick={() => handleDelete(wordData._id)}><DeleteIcon /> Delete</button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
