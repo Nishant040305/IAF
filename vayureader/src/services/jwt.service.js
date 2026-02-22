@@ -7,8 +7,36 @@
  */
 
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { jwt: jwtConfig } = require('../config/environment');
-const Admin = require('../models/Admin');
+
+/**
+ * Generates an opaque ID for session/token tracking.
+ *
+ * @param {number} [bytes=24] - Number of random bytes
+ * @returns {string}
+ */
+const generateOpaqueId = (bytes = 24) => {
+    return crypto.randomBytes(bytes).toString('base64url');
+};
+
+/**
+ * Ensures session claims are present in every issued JWT.
+ *
+ * @param {Object} additionalPayload - Incoming payload
+ * @returns {{sid: string, jti: string}}
+ */
+const resolveSessionClaims = (additionalPayload = {}) => {
+    const sid = typeof additionalPayload.sid === 'string' && additionalPayload.sid
+        ? additionalPayload.sid
+        : generateOpaqueId(24);
+
+    const jti = typeof additionalPayload.jti === 'string' && additionalPayload.jti
+        ? additionalPayload.jti
+        : generateOpaqueId(16);
+
+    return { sid, jti };
+};
 
 /**
  * Generates a JWT token for a user.
@@ -18,9 +46,12 @@ const Admin = require('../models/Admin');
  * @returns {string} JWT token
  */
 const generateUserToken = (userId, additionalPayload = {}) => {
+    const { sid, jti } = resolveSessionClaims(additionalPayload);
     const payload = {
         userId,
         type: 'user',
+        sid,
+        jti,
         ...additionalPayload
     };
 
@@ -38,10 +69,13 @@ const generateUserToken = (userId, additionalPayload = {}) => {
  * @returns {string} JWT token
  */
 const generateLifetimeUserToken = (userId, additionalPayload = {}) => {
+    const { sid, jti } = resolveSessionClaims(additionalPayload);
     const payload = {
         userId,
         type: 'user',
         lifetime: true,
+        sid,
+        jti,
         ...additionalPayload
     };
 
@@ -57,9 +91,10 @@ const generateLifetimeUserToken = (userId, additionalPayload = {}) => {
  * @param {Object} admin - Admin document
  * @returns {string} JWT token
  */
-const generateAdminToken = (admin) => {
+const generateAdminToken = (admin, additionalPayload = {}) => {
     const tokenVersion = Number.isInteger(admin?.tokenVersion) ? admin.tokenVersion : 0;
     const permissions = admin?.permissions || [];
+    const { sid, jti } = resolveSessionClaims(additionalPayload);
 
     const payload = {
         adminId: admin._id,
@@ -67,7 +102,10 @@ const generateAdminToken = (admin) => {
         contact: admin.contact,
         permissions,
         tokenVersion,
-        type: 'admin'
+        sid,
+        jti,
+        type: 'admin',
+        ...additionalPayload
     };
 
     return jwt.sign(payload, jwtConfig.secret, {

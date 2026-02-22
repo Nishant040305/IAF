@@ -140,6 +140,16 @@ const redis = {
     url: process.env.REDIS_URL || 'redis://localhost:6379'
 };
 
+/**
+ * DPoP (Proof-of-Possession) configuration
+ */
+const dpop = {
+    enabled: process.env.DPOP_ENABLED !== 'false',
+    proofTtlSeconds: parseInt(process.env.DPOP_PROOF_TTL_SECONDS || '120', 10),
+    maxIatSkewSeconds: parseInt(process.env.DPOP_MAX_IAT_SKEW_SECONDS || '90', 10),
+    allowQueryProof: process.env.DPOP_ALLOW_QUERY_PROOF !== 'false'
+};
+
 module.exports = {
     server,
     database,
@@ -147,5 +157,6 @@ module.exports = {
     otp,
     cors,
     rateLimit,
-    redis
+    redis,
+    dpop
 };

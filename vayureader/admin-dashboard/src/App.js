@@ -11,6 +11,7 @@ import {
   getPermissionsFromToken
 } from './utils/adminToken';
 import { clearKeyCache } from './utils/encryption';
+import { clearDpopKeys } from './utils/dpop';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -46,6 +47,7 @@ function App() {
           localStorage.removeItem('admin_info');
           clearAdminToken();
           setAdminTokenState(null);
+          clearDpopKeys();
         }
       }
       setChecking(false);
@@ -78,6 +80,7 @@ function App() {
     localStorage.removeItem('admin_info');
     clearAdminToken();
     clearKeyCache();
+    clearDpopKeys();
     setAdminTokenState(null);
     setUser(null);
   };

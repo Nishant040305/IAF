@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import api from '../utils/api';
 import { useNotifications, NotificationToast } from '../hooks/useNotifications';
 import { setAdminToken } from '../utils/adminToken';
+import { getDpopPublicJwk } from '../utils/dpop';
 
 export default function Login({ onLoginSuccess, onForgotPassword }) {
     const [step, setStep] = useState(1); // 1: password, 2: OTP
@@ -105,11 +106,13 @@ export default function Login({ onLoginSuccess, onForgotPassword }) {
         setLoading(true);
         setError('');
         try {
+            const dpopPublicKey = await getDpopPublicJwk();
             const res = await api.post('/api/admin/login/verify-otp', {
                 contact,
                 otp: otpString,
                 loginToken,
-                deviceId
+                deviceId,
+                dpopPublicKey
             });
             const { admin, token } = res.data.data;
             // JWT is now stored in HTTP-only cookie by the server

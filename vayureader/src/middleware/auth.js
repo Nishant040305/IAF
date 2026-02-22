@@ -10,6 +10,8 @@ const { verifyToken } = require('../services/jwt.service');
 const response = require('../utils/response');
 const User = require('../models/User');
 const Admin = require('../models/Admin');
+const { validateSession, SESSION_TYPES } = require('../services/session.service');
+const { verifyDpopProof } = require('../services/dpop.service');
 
 /**
  * Authenticates a user via JWT token.
@@ -23,13 +25,13 @@ const authenticateUser = async (req, res, next) => {
     try {
         let token;
 
-        // Check cookie first
-        if (req.cookies && req.cookies.auth_token) {
-            token = req.cookies.auth_token;
-        }
-        // Fallback to Authorization header
-        else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+        // Prefer Authorization header (avoids stale cookie overriding fresh bearer token)
+        if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
             token = req.headers.authorization.split(' ')[1];
+        }
+        // Fallback to cookie
+        else if (req.cookies && req.cookies.auth_token) {
+            token = req.cookies.auth_token;
         }
 
         if (!token) {
@@ -41,6 +43,26 @@ const authenticateUser = async (req, res, next) => {
         // Ensure it's a user token (not admin)
         if (decoded.type !== 'user') {
             return response.unauthorized(res, 'Invalid token type');
+        }
+
+        const dpopVerification = await verifyDpopProof({
+            req,
+            accessToken: token,
+            expectedJkt: decoded?.cnf?.jkt
+        });
+        if (!dpopVerification.valid) {
+            return response.unauthorized(res, dpopVerification.error || 'Invalid DPoP proof');
+        }
+
+        const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
+        const sessionValidation = await validateSession({
+            sid: decoded.sid,
+            type: SESSION_TYPES.USER,
+            accountId: decoded.userId,
+            tokenVersion: decodedTokenVersion
+        });
+        if (!sessionValidation.valid) {
+            return response.unauthorized(res, 'Session expired. Please login again.');
         }
 
         // Check if user is blocked or deleted
@@ -58,7 +80,6 @@ const authenticateUser = async (req, res, next) => {
             return response.forbidden(res, 'Security setup required');
         }
 
-        const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
         const currentTokenVersion = user.tokenVersion || 0;
         if (decodedTokenVersion !== currentTokenVersion) {
             return response.unauthorized(res, 'Session expired. Please login again.');
@@ -70,6 +91,8 @@ const authenticateUser = async (req, res, next) => {
             phone_number: decoded.phone_number,
             deviceId: decoded.deviceId,
             name: decoded.name,
+            sid: decoded.sid,
+            cnfJkt: decoded?.cnf?.jkt || null,
             tokenVersion: currentTokenVersion
         };
 
@@ -94,13 +117,13 @@ const authenticateUser = async (req, res, next) => {
 const optionalAuth = async (req, res, next) => {
     let token;
 
-    // Check cookie first
-    if (req.cookies && req.cookies.auth_token) {
-        token = req.cookies.auth_token;
-    }
-    // Fallback to Authorization header
-    else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    // Prefer Authorization header (avoids stale cookie overriding fresh bearer token)
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
         token = req.headers.authorization.split(' ')[1];
+    }
+    // Fallback to cookie
+    else if (req.cookies && req.cookies.auth_token) {
+        token = req.cookies.auth_token;
     }
 
     if (!token) {
@@ -109,12 +132,31 @@ const optionalAuth = async (req, res, next) => {
 
     try {
         const decoded = verifyToken(token);
+        const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
+
+        const dpopVerification = await verifyDpopProof({
+            req,
+            accessToken: token,
+            expectedJkt: decoded?.cnf?.jkt
+        });
+        if (!dpopVerification.valid) {
+            return next();
+        }
 
         if (decoded.type === 'user') {
+            const sessionValidation = await validateSession({
+                sid: decoded.sid,
+                type: SESSION_TYPES.USER,
+                accountId: decoded.userId,
+                tokenVersion: decodedTokenVersion
+            });
+            if (!sessionValidation.valid) {
+                return next();
+            }
+
             // Validate user still exists and is not blocked
             const user = await User.findById(decoded.userId).select('isBlocked tokenVersion isVerified');
             if (user && !user.isBlocked) {
-                const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
                 const currentTokenVersion = user.tokenVersion || 0;
                 if (decodedTokenVersion !== currentTokenVersion) {
                     return next();
@@ -125,10 +167,22 @@ const optionalAuth = async (req, res, next) => {
                     phone_number: decoded.phone_number,
                     deviceId: decoded.deviceId,
                     name: decoded.name,
+                    sid: decoded.sid,
+                    cnfJkt: decoded?.cnf?.jkt || null,
                     tokenVersion: currentTokenVersion
                 };
             }
         } else if (decoded.type === 'admin') {
+            const sessionValidation = await validateSession({
+                sid: decoded.sid,
+                type: SESSION_TYPES.ADMIN,
+                accountId: decoded.adminId,
+                tokenVersion: decodedTokenVersion
+            });
+            if (!sessionValidation.valid) {
+                return next();
+            }
+
             // Mirror admin validation used by strict middleware:
             // ensure admin exists and token session is still valid.
             const admin = await Admin.findById(decoded.adminId)
@@ -137,7 +191,6 @@ const optionalAuth = async (req, res, next) => {
                 return next();
             }
 
-            const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
             const currentTokenVersion = admin.tokenVersion || 0;
             if (decodedTokenVersion !== currentTokenVersion) {
                 return next();
@@ -148,6 +201,8 @@ const optionalAuth = async (req, res, next) => {
                 name: admin.name,
                 contact: admin.contact,
                 permissions: admin.permissions || [],
+                sid: decoded.sid,
+                cnfJkt: decoded?.cnf?.jkt || null,
                 tokenVersion: currentTokenVersion
             };
         }

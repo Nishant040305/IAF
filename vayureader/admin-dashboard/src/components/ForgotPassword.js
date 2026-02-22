@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import api from '../utils/api';
 import { setAdminToken } from '../utils/adminToken';
+import { getDpopPublicJwk } from '../utils/dpop';
 
 const STEPS = {
     ENTER_CONTACT: 1,
@@ -79,12 +80,14 @@ export default function ForgotPassword({ onBack, onSuccess }) {
         setLoading(true);
 
         try {
+            const dpopPublicKey = await getDpopPublicJwk();
             // Use the admin reset endpoint
             const res = await api.post('/api/admin/recovery/reset', {
                 contact,
                 otp,
                 loginToken,
-                newPassword: password // Send as newPassword
+                newPassword: password, // Send as newPassword
+                dpopPublicKey
             });
             const { admin, token } = res.data.data || {};
             if (admin) {

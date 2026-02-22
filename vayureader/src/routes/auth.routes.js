@@ -43,7 +43,7 @@ router.post(
     '/login/verify-otp',
     loginLimiter,
     trimFields,
-    requireFields(['phone_number', 'otp']),
+    requireFields(['phone_number', 'otp', 'deviceId', 'loginToken']),
     authController.verifyLoginOtp
 );
 

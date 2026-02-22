@@ -8,12 +8,14 @@
 
 const User = require('../models/User');
 const { generateLifetimeUserToken } = require('../services/jwt.service');
-const { generateOtp, generateLoginToken, saveOtp, verifyOtp, deleteOtp, shouldSkipSend } = require('../services/otp.service');
+const { generateOtp, generateLoginToken, saveOtp, verifyOtp, shouldSkipSend } = require('../services/otp.service');
+const { createSession, revokeAllSessions, SESSION_TYPES } = require('../services/session.service');
+const { validateDpopPublicJwk } = require('../services/dpop.service');
 const { sendOtpSms } = require('../services/sms.service');
 const { logLogin, logDeviceChange, logNameChange } = require('../services/userAudit.service');
 const response = require('../utils/response');
 const { sanitizePhone, sanitizeName } = require('../utils/sanitize');
-const { server } = require('../config/environment');
+const { server, dpop: dpopConfig } = require('../config/environment');
 const { redisClient } = require('../config/redis');
 
 /**
@@ -111,7 +113,7 @@ const requestLoginOtp = async (req, res, next) => {
 const verifyLoginOtp = async (req, res, next) => {
     try {
         const phoneNumber = sanitizePhone(req.body.phone_number);
-        const { otp, deviceId, loginToken } = req.body;
+        const { otp, deviceId, loginToken, dpopPublicKey } = req.body;
 
 
 
@@ -126,6 +128,15 @@ const verifyLoginOtp = async (req, res, next) => {
 
         if (!loginToken) {
             return response.badRequest(res, 'Login token is required. Please request OTP again.');
+        }
+
+        let dpopJkt = null;
+        if (dpopConfig.enabled) {
+            const dpopKeyCheck = validateDpopPublicJwk(dpopPublicKey);
+            if (!dpopKeyCheck.valid) {
+                return response.badRequest(res, dpopKeyCheck.error);
+            }
+            dpopJkt = dpopKeyCheck.jkt;
         }
 
         const sanitizedDeviceId = deviceId.trim();
@@ -171,13 +182,25 @@ const verifyLoginOtp = async (req, res, next) => {
         // Log login event
         logLogin(user, sanitizedDeviceId);
 
-        // Generate lifetime JWT token with user details
-        const token = generateLifetimeUserToken(user._id, {
+        const tokenVersion = user.tokenVersion || 0;
+        const { sid } = await createSession({
+            type: SESSION_TYPES.USER,
+            accountId: user._id,
+            tokenVersion
+        });
+
+        // Generate lifetime JWT token with user details + server-side session id
+        const tokenPayload = {
+            sid,
             deviceId: sanitizedDeviceId,
             phone_number: user.phone_number,
             name: user.name,
-            tokenVersion: user.tokenVersion || 0
-        });
+            tokenVersion
+        };
+        if (dpopJkt) {
+            tokenPayload.cnf = { jkt: dpopJkt };
+        }
+        const token = generateLifetimeUserToken(user._id, tokenPayload);
 
         // Set HTTP-only cookie with long expiration
         const isTesting = server.isTesting;
@@ -221,6 +244,12 @@ const logout = async (req, res, next) => {
 
         if (!user) {
             return response.unauthorized(res, 'User no longer exists');
+        }
+
+        try {
+            await revokeAllSessions(SESSION_TYPES.USER, userId);
+        } catch (sessionError) {
+            console.warn('Failed to revoke user sessions on logout:', sessionError.message);
         }
 
         // Clear short-lived auth cache used by unifiedAuth.

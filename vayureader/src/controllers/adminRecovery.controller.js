@@ -10,13 +10,15 @@ const Admin = require('../models/Admin');
 const { hashSecurityAnswers, verifySecurityAnswers, AVAILABLE_QUESTIONS } = require('../services/securityQuestion.service');
 const { generateOtp, generateLoginToken, saveOtp, shouldSkipSend } = require('../services/otp.service');
 const { sendOtpSms } = require('../services/sms.service');
-const { verifyOtp, deleteOtp } = require('../services/otp.service');
+const { verifyOtp } = require('../services/otp.service');
 const { hashPassword } = require('../services/password.service');
 const { generateAdminToken } = require('../services/jwt.service');
+const { createSession, revokeAllSessions, SESSION_TYPES } = require('../services/session.service');
+const { validateDpopPublicJwk } = require('../services/dpop.service');
 const { logUpdate, RESOURCE_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
 const { sanitizePhone } = require('../utils/sanitize');
-const { server } = require('../config/environment');
+const { server, dpop: dpopConfig } = require('../config/environment');
 
 /**
  * Get available security questions.
@@ -184,7 +186,7 @@ const verifyRecoveryAnswers = async (req, res, next) => {
 const resetPassword = async (req, res, next) => {
     try {
         const contact = sanitizePhone(req.body.contact);
-        const { otp, loginToken, newPassword } = req.body;
+        const { otp, loginToken, newPassword, dpopPublicKey } = req.body;
 
         if (!contact || !otp || !loginToken || !newPassword) {
             return response.badRequest(res, 'All fields are required');
@@ -196,6 +198,15 @@ const resetPassword = async (req, res, next) => {
 
         if (newPassword.length > 100) {
             return response.badRequest(res, 'Password must be at most 100 characters long');
+        }
+
+        let dpopJkt = null;
+        if (dpopConfig.enabled) {
+            const dpopKeyCheck = validateDpopPublicJwk(dpopPublicKey);
+            if (!dpopKeyCheck.valid) {
+                return response.badRequest(res, dpopKeyCheck.error);
+            }
+            dpopJkt = dpopKeyCheck.jkt;
         }
 
         const admin = await Admin.findOne({ contact });
@@ -212,6 +223,7 @@ const resetPassword = async (req, res, next) => {
 
         // Reset Password
         admin.passwordHash = await hashPassword(newPassword);
+        admin.tokenVersion = (admin.tokenVersion || 0) + 1; // Force-invalidate previous sessions
         admin.isVerified = true; // Ensure they are verified if they recover account
         await admin.save();
 
@@ -225,8 +237,26 @@ const resetPassword = async (req, res, next) => {
         // Clear OTP - Handled in verifyOtp service
         // await deleteOtp(contact);
 
+        try {
+            await revokeAllSessions(SESSION_TYPES.ADMIN, admin._id);
+        } catch (sessionError) {
+            console.warn('Failed to revoke admin sessions during recovery reset:', sessionError.message);
+        }
+
+        const { sid } = await createSession({
+            type: SESSION_TYPES.ADMIN,
+            accountId: admin._id,
+            tokenVersion: admin.tokenVersion || 0
+        });
+
         // Auto-login: Generate JWT
-        const token = generateAdminToken(admin);
+        const tokenPayload = {
+            sid,
+        };
+        if (dpopJkt) {
+            tokenPayload.cnf = { jkt: dpopJkt };
+        }
+        const token = generateAdminToken(admin, tokenPayload);
 
         // Set Cookie
         const isProduction = process.env.NODE_ENV === 'production';

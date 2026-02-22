@@ -8,13 +8,15 @@
 
 const Admin = require('../models/Admin');
 const { generateAdminToken } = require('../services/jwt.service');
-const { generateOtp, generateLoginToken, saveOtp, verifyOtp, deleteOtp, shouldSkipSend } = require('../services/otp.service');
+const { generateOtp, generateLoginToken, saveOtp, verifyOtp, shouldSkipSend } = require('../services/otp.service');
+const { createSession, revokeAllSessions, SESSION_TYPES } = require('../services/session.service');
+const { validateDpopPublicJwk } = require('../services/dpop.service');
 const { sendOtpSms } = require('../services/sms.service');
 const { hashPassword, comparePassword } = require('../services/password.service');
 const { logAction, RESOURCE_TYPES, ACTION_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
 const { sanitizePhone, sanitizeName, escapeRegex } = require('../utils/sanitize');
-const { server } = require('../config/environment');
+const { server, dpop: dpopConfig } = require('../config/environment');
 const { redisClient } = require('../config/redis');
 
 // =============================================================================
@@ -90,10 +92,19 @@ const requestLoginOtp = async (req, res, next) => {
 const verifyLoginOtp = async (req, res, next) => {
     try {
         const contact = sanitizePhone(req.body.contact);
-        const { otp, loginToken } = req.body;
+        const { otp, loginToken, dpopPublicKey } = req.body;
 
         if (!contact || !otp || !loginToken) {
-            return response.badRequest(res, 'Contact, OTP, loginToken, and deviceId are required');
+            return response.badRequest(res, 'Contact, OTP, and loginToken are required');
+        }
+
+        let dpopJkt = null;
+        if (dpopConfig.enabled) {
+            const dpopKeyCheck = validateDpopPublicJwk(dpopPublicKey);
+            if (!dpopKeyCheck.valid) {
+                return response.badRequest(res, dpopKeyCheck.error);
+            }
+            dpopJkt = dpopKeyCheck.jkt;
         }
 
         const admin = await Admin.findOne({ contact });
@@ -112,7 +123,20 @@ const verifyLoginOtp = async (req, res, next) => {
         // Clear OTP from Redis - Handled in verifyOtp service
         // await deleteOtp(contact);
 
-        const token = generateAdminToken(admin);
+        const tokenVersion = admin.tokenVersion || 0;
+        const { sid } = await createSession({
+            type: SESSION_TYPES.ADMIN,
+            accountId: admin._id,
+            tokenVersion
+        });
+
+        const tokenPayload = {
+            sid,
+        };
+        if (dpopJkt) {
+            tokenPayload.cnf = { jkt: dpopJkt };
+        }
+        const token = generateAdminToken(admin, tokenPayload);
 
         // Set JWT as HTTP-only cookie
         const isProduction = process.env.NODE_ENV === 'production';
@@ -424,7 +448,34 @@ const getCurrentAdmin = async (req, res, next) => {
             return response.unauthorized(res, 'Admin account no longer exists');
         }
 
-        const token = generateAdminToken(admin);
+        let sid = req.admin.sid;
+        if (!sid) {
+            const created = await createSession({
+                type: SESSION_TYPES.ADMIN,
+                accountId: admin._id,
+                tokenVersion: admin.tokenVersion || 0
+            });
+            sid = created.sid;
+        }
+
+        const tokenPayload = { sid };
+        if (req.admin.cnfJkt) {
+            tokenPayload.cnf = { jkt: req.admin.cnfJkt };
+        }
+        const token = generateAdminToken(admin, tokenPayload);
+
+        // Keep cookie token aligned with returned token (important for endpoints
+        // that cannot send Authorization header, e.g. window.open/EventSource).
+        const isProduction = process.env.NODE_ENV === 'production';
+        const isTesting = server.isTesting;
+        res.cookie('admin_token', token, {
+            httpOnly: true,
+            secure: isProduction || isTesting,
+            sameSite: isTesting ? 'none' : 'lax',
+            maxAge: 24 * 60 * 60 * 1000,
+            path: '/'
+        });
+
         response.success(res, {
             adminId: admin._id,
             ...admin.toSafeObject(),
@@ -453,6 +504,12 @@ const logout = async (req, res, next) => {
 
         if (!admin) {
             return response.unauthorized(res, 'Admin account no longer exists');
+        }
+
+        try {
+            await revokeAllSessions(SESSION_TYPES.ADMIN, adminId);
+        } catch (sessionError) {
+            console.warn('Failed to revoke admin sessions on logout:', sessionError.message);
         }
 
         // Clear short-lived auth cache used by unifiedAuth.

@@ -10,6 +10,8 @@ const { verifyToken } = require('../services/jwt.service');
 const response = require('../utils/response');
 const User = require('../models/User');
 const { redisClient } = require('../config/redis');
+const { validateSession, SESSION_TYPES } = require('../services/session.service');
+const { verifyDpopProof } = require('../services/dpop.service');
 
 /**
  * Authenticates an admin via JWT token.
@@ -37,15 +39,13 @@ const authenticateAdmin = async (req, res, next) => {
     try {
         let token;
 
-        // Try to get token from cookie first
-        if (req.cookies && req.cookies.admin_token) {
+        // Prefer Authorization header (avoids stale cookie overriding fresh bearer token)
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.split(' ')[1];
+        } else if (req.cookies && req.cookies.admin_token) {
+            // Fallback to cookie
             token = req.cookies.admin_token;
-        } else {
-            // Fallback to Authorization header
-            const authHeader = req.headers.authorization;
-            if (authHeader && authHeader.startsWith('Bearer ')) {
-                token = authHeader.split(' ')[1];
-            }
         }
 
         if (!token) {
@@ -59,6 +59,26 @@ const authenticateAdmin = async (req, res, next) => {
             return response.unauthorized(res, 'Admin access required');
         }
 
+        const dpopVerification = await verifyDpopProof({
+            req,
+            accessToken: token,
+            expectedJkt: decoded?.cnf?.jkt
+        });
+        if (!dpopVerification.valid) {
+            return response.unauthorized(res, dpopVerification.error || 'Invalid DPoP proof');
+        }
+
+        const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
+        const sessionValidation = await validateSession({
+            sid: decoded.sid,
+            type: SESSION_TYPES.ADMIN,
+            accountId: decoded.adminId,
+            tokenVersion: decodedTokenVersion
+        });
+        if (!sessionValidation.valid) {
+            return response.unauthorized(res, 'Session expired. Please login again.');
+        }
+
         // Database verification: ensure admin exists and token session is still valid.
         const admin = await Admin.findById(decoded.adminId)
             .select('name contact permissions tokenVersion isVerified');
@@ -66,7 +86,6 @@ const authenticateAdmin = async (req, res, next) => {
             return response.unauthorized(res, 'Admin account no longer exists');
         }
 
-        const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
         const currentTokenVersion = admin.tokenVersion || 0;
         if (decodedTokenVersion !== currentTokenVersion) {
             return response.unauthorized(res, 'Session expired. Please login again.');
@@ -87,6 +106,8 @@ const authenticateAdmin = async (req, res, next) => {
             name: admin.name,
             contact: admin.contact,
             permissions: admin.permissions || [],
+            sid: decoded.sid,
+            cnfJkt: decoded?.cnf?.jkt || null,
             tokenVersion: currentTokenVersion
         };
 
@@ -137,18 +158,16 @@ const unifiedAuth = async (req, res, next) => {
     try {
         let token;
 
-        // 1. Check Cookies
-        if (req.cookies) {
-            if (req.cookies.admin_token) token = req.cookies.admin_token;
-            else if (req.cookies.auth_token) token = req.cookies.auth_token;
+        // 1. Prefer Authorization header (avoids stale cookie overriding fresh bearer token)
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.split(' ')[1];
         }
 
-        // 2. Fallback to Header
-        if (!token) {
-            const authHeader = req.headers.authorization;
-            if (authHeader && authHeader.startsWith('Bearer ')) {
-                token = authHeader.split(' ')[1];
-            }
+        // 2. Fallback to Cookies
+        if (!token && req.cookies) {
+            if (req.cookies.admin_token) token = req.cookies.admin_token;
+            else if (req.cookies.auth_token) token = req.cookies.auth_token;
         }
 
         if (!token) {
@@ -156,8 +175,27 @@ const unifiedAuth = async (req, res, next) => {
         }
 
         const decoded = verifyToken(token);
+        const dpopVerification = await verifyDpopProof({
+            req,
+            accessToken: token,
+            expectedJkt: decoded?.cnf?.jkt
+        });
+        if (!dpopVerification.valid) {
+            return response.unauthorized(res, dpopVerification.error || 'Invalid DPoP proof');
+        }
 
         if (decoded.type === 'admin') {
+            const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
+            const sessionValidation = await validateSession({
+                sid: decoded.sid,
+                type: SESSION_TYPES.ADMIN,
+                accountId: decoded.adminId,
+                tokenVersion: decodedTokenVersion
+            });
+            if (!sessionValidation.valid) {
+                return response.unauthorized(res, 'Session expired. Please login again.');
+            }
+
             const cacheKey = `auth_admin:${decoded.adminId}`;
             let admin;
             const cachedAdmin = await redisClient.get(cacheKey);
@@ -178,7 +216,6 @@ const unifiedAuth = async (req, res, next) => {
                 return response.unauthorized(res, 'Admin account no longer exists');
             }
 
-            const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
             const currentTokenVersion = admin.tokenVersion || 0;
             if (decodedTokenVersion !== currentTokenVersion) {
                 return response.unauthorized(res, 'Session expired. Please login again.');
@@ -195,6 +232,8 @@ const unifiedAuth = async (req, res, next) => {
                 name: admin.name,
                 contact: admin.contact,
                 permissions: admin.permissions || [],
+                sid: decoded.sid,
+                cnfJkt: decoded?.cnf?.jkt || null,
                 tokenVersion: currentTokenVersion
             };
             req.userType = 'admin';
@@ -202,6 +241,17 @@ const unifiedAuth = async (req, res, next) => {
         }
 
         if (decoded.type === 'user') {
+            const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
+            const sessionValidation = await validateSession({
+                sid: decoded.sid,
+                type: SESSION_TYPES.USER,
+                accountId: decoded.userId,
+                tokenVersion: decodedTokenVersion
+            });
+            if (!sessionValidation.valid) {
+                return response.unauthorized(res, 'Session expired. Please login again.');
+            }
+
             // Users can only access GET methods
             const readOnlyMethods = ['GET', 'HEAD', 'OPTIONS'];
             if (!readOnlyMethods.includes(req.method)) {
@@ -229,7 +279,6 @@ const unifiedAuth = async (req, res, next) => {
                 return response.unauthorized(res, 'User is blocked');
             }
 
-            const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
             const currentTokenVersion = user.tokenVersion || 0;
             if (decodedTokenVersion !== currentTokenVersion) {
                 return response.unauthorized(res, 'Session expired. Please login again.');
@@ -241,7 +290,13 @@ const unifiedAuth = async (req, res, next) => {
                 return response.forbidden(res, 'Security setup required.');
             }
 
-            req.user = { userId: decoded.userId, phone_number: decoded.phone_number, tokenVersion: currentTokenVersion };
+            req.user = {
+                userId: decoded.userId,
+                phone_number: decoded.phone_number,
+                sid: decoded.sid,
+                cnfJkt: decoded?.cnf?.jkt || null,
+                tokenVersion: currentTokenVersion
+            };
             req.userType = 'user';
             return next();
         }

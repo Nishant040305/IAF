@@ -1,4 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { getAdminToken } from '../utils/adminToken';
+import { createDpopProof, appendDpopQueryParam } from '../utils/dpop';
 
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -25,7 +27,7 @@ export function usePdfEvents({ onPdfAdded, onPdfUpdated, onPdfDeleted, enabled =
     // Get the API base URL
     const baseUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 
-    const connect = useCallback(() => {
+    const connect = useCallback(async () => {
         // Clean up existing connection
         if (eventSourceRef.current) {
             eventSourceRef.current.close();
@@ -35,7 +37,16 @@ export function usePdfEvents({ onPdfAdded, onPdfUpdated, onPdfDeleted, enabled =
             // Create SSE connection - browser will send cookies automatically
             // Note: EventSource doesn't support withCredentials in all browsers,
             // so we use fetch with ReadableStream for cross-origin with credentials
-            const sseUrl = `${baseUrl}/api/events`;
+            const rawSseUrl = `${baseUrl}/api/events`;
+            const token = getAdminToken();
+            const dpopProof = token
+                ? await createDpopProof({
+                    method: 'GET',
+                    requestUri: rawSseUrl,
+                    accessToken: token
+                })
+                : null;
+            const sseUrl = dpopProof ? appendDpopQueryParam(rawSseUrl, dpopProof) : rawSseUrl;
 
             // Use native EventSource for same-origin, or polyfill pattern for CORS
             const eventSource = new EventSource(sseUrl, { withCredentials: true });

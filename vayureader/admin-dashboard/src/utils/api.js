@@ -6,6 +6,7 @@ import {
     decrypt,
     clearKeyCache
 } from './encryption';
+import { createDpopProof, clearDpopKeys } from './dpop';
 
 const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
 console.log('[API DEBUG] Base URL:', BASE_URL, 'ENV:', process.env.REACT_APP_API_BASE_URL);
@@ -73,10 +74,23 @@ const api = axios.create({
 
 api.interceptors.request.use(async (config) => {
     try {
-        if (isExcluded(config.url)) return config;
-
         const token = getAdminToken();
-        if (!token) return config;
+        if (token) {
+            config.headers = config.headers || {};
+            if (!config.headers.Authorization && !config.headers.authorization) {
+                config.headers.Authorization = `Bearer ${token}`;
+            }
+
+            const requestUri = api.getUri(config);
+            const proof = await createDpopProof({
+                method: config.method || 'GET',
+                requestUri,
+                accessToken: token
+            });
+            config.headers.DPoP = proof;
+        }
+
+        if (isExcluded(config.url) || !token) return config;
 
         // Skip multipart (file uploads)
         const ct = config.headers?.['Content-Type'] || config.headers?.['content-type'] || '';
@@ -145,6 +159,7 @@ api.interceptors.response.use(
             localStorage.removeItem('admin_info');
             clearAdminToken();
             clearKeyCache();
+            clearDpopKeys();
             if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
                 window.location.href = '/';
             }

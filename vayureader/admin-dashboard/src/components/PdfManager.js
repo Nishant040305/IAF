@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../utils/api';
 import { getAdminToken } from '../utils/adminToken';
 import { getSessionKey, encrypt } from '../utils/encryption';
+import { createDpopProof, appendDpopQueryParam } from '../utils/dpop';
 import { usePdfEvents } from '../hooks/usePdfEvents';
 import { useNotifications, NotificationToast } from '../hooks/useNotifications';
 import Pagination from './Pagination';
@@ -169,6 +170,34 @@ export default function PdfManager(props) {
       addNotification('PDF deleted successfully', 'success');
     } catch {
       addNotification('Failed to delete PDF', 'error');
+    }
+  };
+
+  const handleViewPdf = async (pdfPath) => {
+    const popup = window.open('', '_blank');
+    if (!popup) {
+      addNotification('Popup was blocked by your browser.', 'warning');
+      return;
+    }
+
+    try {
+      const token = getAdminToken();
+      const rawUrl = `${api.defaults.baseURL}${pdfPath}`;
+      let targetUrl = rawUrl;
+
+      if (token) {
+        const dpopProof = await createDpopProof({
+          method: 'GET',
+          requestUri: rawUrl,
+          accessToken: token
+        });
+        targetUrl = appendDpopQueryParam(rawUrl, dpopProof);
+      }
+
+      popup.location.href = targetUrl;
+    } catch (error) {
+      popup.close();
+      addNotification('Failed to generate secure file access proof.', 'error');
     }
   };
 
@@ -1028,7 +1057,7 @@ export default function PdfManager(props) {
                               )}
                               <button
                                 className="btn-icon primary"
-                                onClick={() => window.open(`${api.defaults.baseURL}${pdf.pdfUrl}`, '_blank')}
+                                onClick={() => handleViewPdf(pdf.pdfUrl)}
                                 title="View"
                               >
                                 <Eye size={18} />
