@@ -43,7 +43,11 @@ const corsOptions = {
         'Authorization',
         'X-Requested-With',
         'Accept',
-        'Origin'
+        'Origin',
+        'Cache-Control',
+        'Pragma',
+        'Expires',
+        'DPoP'
     ],
 
     exposedHeaders: ['Content-Type', 'Authorization'],
