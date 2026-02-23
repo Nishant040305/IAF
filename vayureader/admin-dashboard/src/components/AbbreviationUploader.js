@@ -7,7 +7,8 @@ import {
   validateAbbreviationData,
   parseAbbreviationCSV,
   sanitizeString,
-  formatCsvCell
+  formatCsvCell,
+  STRICT_WORD_PATTERN
 } from '../utils/validateUpload';
 import Pagination from './Pagination';
 
@@ -125,6 +126,12 @@ export default function AbbreviationUploader({ permissions = [] }) {
       showMessage('Both fields are required', 'error');
       return;
     }
+
+    if (!STRICT_WORD_PATTERN.test(cleanAbbr)) {
+      showMessage('Abbreviation contains invalid special characters', 'error');
+      return;
+    }
+
     try {
       setAddLoading(true);
       await api.post('/api/abbreviations', { abbreviation: cleanAbbr, fullForm: cleanForm }, { timeout: 10000 });
@@ -218,7 +225,7 @@ export default function AbbreviationUploader({ permissions = [] }) {
 
     setLoading(true);
     try {
-      await api.post('/api/abbreviations/bulk', stagedData, { timeout: 30000 });
+      await api.post('/api/abbreviations/bulk', stagedData, { timeout: 60000 });
       showMessage(`Successfully uploaded ${stagedData.length} abbreviations`, 'success');
       setStagedData(null);
       setStagedFileName('');
@@ -300,6 +307,12 @@ export default function AbbreviationUploader({ permissions = [] }) {
       showMessage('Both fields are required', 'error');
       return;
     }
+
+    if (!STRICT_WORD_PATTERN.test(cleanAbbr)) {
+      showMessage('Abbreviation contains invalid special characters', 'error');
+      return;
+    }
+
     try {
       setLoading(true);
       await api.put(`/api/abbreviations/${editingId}`, { abbreviation: cleanAbbr, fullForm: cleanForm });

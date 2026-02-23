@@ -165,6 +165,11 @@ const createAbbreviation = async (req, res, next) => {
             return response.conflict(res, 'Abbreviation already exists');
         }
 
+        const strictWordPattern = /^[a-zA-Z0-9\s\-'.\/()]+$/;
+        if (!strictWordPattern.test(abbreviation)) {
+            return response.badRequest(res, 'Abbreviation contains invalid special characters');
+        }
+
         const newAbbr = new Abbreviation({
             abbreviation: abbreviation.toUpperCase(),
             fullForm
@@ -197,6 +202,11 @@ const updateAbbreviation = async (req, res, next) => {
         const oldAbbr = await Abbreviation.findById(req.params.id);
         if (!oldAbbr) {
             return response.notFound(res, 'Abbreviation not found');
+        }
+
+        const strictWordPattern = /^[a-zA-Z0-9\s\-'.\/()]+$/;
+        if (!strictWordPattern.test(abbreviation)) {
+            return response.badRequest(res, 'Abbreviation contains invalid special characters');
         }
 
         const updated = await Abbreviation.findByIdAndUpdate(
@@ -266,7 +276,14 @@ const bulkUpload = async (req, res, next) => {
             return response.badRequest(res, 'Input must be an array of abbreviations');
         }
 
-        const formatted = abbreviations.map(item => ({
+        const strictWordPattern = /^[a-zA-Z0-9\s\-'.\/()]+$/;
+        const validAbbreviations = abbreviations.filter(item => strictWordPattern.test(item.abbreviation));
+
+        if (validAbbreviations.length === 0) {
+            return response.badRequest(res, 'No valid abbreviations found');
+        }
+
+        const formatted = validAbbreviations.map(item => ({
             abbreviation: item.abbreviation.toUpperCase(),
             fullForm: item.fullForm
         }));

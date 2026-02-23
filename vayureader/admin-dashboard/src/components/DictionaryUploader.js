@@ -7,7 +7,8 @@ import {
   validateDictionaryData,
   parseDictionaryCSV,
   sanitizeString,
-  formatCsvCell
+  formatCsvCell,
+  STRICT_WORD_PATTERN
 } from '../utils/validateUpload';
 import Pagination from './Pagination';
 
@@ -139,6 +140,11 @@ export default function DictionaryUploader({ permissions = [] }) {
       return;
     }
 
+    if (!STRICT_WORD_PATTERN.test(word)) {
+      showMessage('Word contains invalid special characters', 'error');
+      return;
+    }
+
     // Format for POST /api/dictionary endpoint (single word creation)
     const singleData = {
       word: word,
@@ -251,7 +257,7 @@ export default function DictionaryUploader({ permissions = [] }) {
 
     setLoading(true);
     try {
-      await api.post('/api/dictionary/upload', stagedData, { timeout: 30000 });
+      await api.post('/api/dictionary/upload', stagedData, { timeout: 60000 });
       showMessage(`Successfully uploaded ${stagedEntryCount} words`, 'success');
       setStagedData(null);
       setStagedFileName('');
@@ -323,6 +329,11 @@ export default function DictionaryUploader({ permissions = [] }) {
   const handleUpdate = async () => {
     if (!editWord.trim() || !editMeaning.trim()) {
       showMessage('Word and definition are required', 'error');
+      return;
+    }
+
+    if (!STRICT_WORD_PATTERN.test(editWord.trim())) {
+      showMessage('Word contains invalid special characters', 'error');
       return;
     }
 

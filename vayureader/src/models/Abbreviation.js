@@ -19,7 +19,8 @@ const abbreviationSchema = new mongoose.Schema(
             unique: true,
             trim: true,
             uppercase: true,
-            index: true
+            index: true,
+            match: [/^[a-zA-Z0-9\s\-'.\/()]+$/, 'Abbreviation contains invalid special characters']
         },
 
         /**

@@ -17,6 +17,7 @@ const DANGEROUS_PATTERNS = [
     /<embed/gi,
 ];
 const DANGEROUS_CSV_PREFIX = /^(=|[-+@].*[|(!])/;
+export const STRICT_WORD_PATTERN = /^[a-zA-Z0-9\s\-'.\/()]+$/;
 
 /**
  * Sanitize a string by removing dangerous content
@@ -126,6 +127,11 @@ export function validateAbbreviationData(data) {
             return null;
         }
 
+        if (!STRICT_WORD_PATTERN.test(item.abbreviation.trim())) {
+            errors.push(`Entry ${idx + 1}: Abbreviation "${item.abbreviation}" contains invalid special characters.`);
+            return null;
+        }
+
         // Block XSS attempts directly
         let hasXSS = false;
         DANGEROUS_PATTERNS.forEach(pattern => {
@@ -180,6 +186,11 @@ export function validateDictionaryData(data) {
         // Specifically block formula/macro injections in dictionary keys and definitions
         if (DANGEROUS_CSV_PREFIX.test(word.trim())) {
             errors.push(`Entry "${word}": CSV/Formula Injection detected in word key`);
+            return;
+        }
+
+        if (!STRICT_WORD_PATTERN.test(word.trim())) {
+            errors.push(`Entry "${word}": Word key contains invalid special characters.`);
             return;
         }
 

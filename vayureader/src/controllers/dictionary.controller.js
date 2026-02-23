@@ -198,6 +198,11 @@ const createWord = async (req, res, next) => {
             return response.conflict(res, 'Word already exists');
         }
 
+        const strictWordPattern = /^[a-zA-Z0-9\s\-'.\/()]+$/;
+        if (!strictWordPattern.test(word)) {
+            return response.badRequest(res, 'Word contains invalid special characters');
+        }
+
         const formattedMeanings = meanings.map(m => ({
             partOfSpeech: m.partOfSpeech || null,
             definition: m.definition,
@@ -242,6 +247,11 @@ const updateWord = async (req, res, next) => {
         const oldWord = await Word.findById(req.params.id);
         if (!oldWord) {
             return response.notFound(res, 'Word not found');
+        }
+
+        const strictWordPattern = /^[a-zA-Z0-9\s\-'.\/()]+$/;
+        if (!strictWordPattern.test(word)) {
+            return response.badRequest(res, 'Word contains invalid special characters');
         }
 
         const formattedMeanings = meanings.map(m => ({
@@ -336,7 +346,8 @@ const uploadDictionary = async (req, res, next) => {
                     examples: meaning[3] || []
                 })) || [];
 
-                if (meanings.length === 0) {
+                const strictWordPattern = /^[a-zA-Z0-9\s\-'.\/()]+$/;
+                if (!strictWordPattern.test(wordKey) || meanings.length === 0) {
                     skippedCount++;
                     continue;
                 }
