@@ -11,7 +11,6 @@ const response = require('../utils/response');
 const User = require('../models/User');
 const Admin = require('../models/Admin');
 const { validateSession, SESSION_TYPES } = require('../services/session.service');
-const { verifyDpopProof } = require('../services/dpop.service');
 
 /**
  * Authenticates a user via JWT token.
@@ -43,15 +42,6 @@ const authenticateUser = async (req, res, next) => {
         // Ensure it's a user token (not admin)
         if (decoded.type !== 'user') {
             return response.unauthorized(res, 'Invalid token type');
-        }
-
-        const dpopVerification = await verifyDpopProof({
-            req,
-            accessToken: token,
-            expectedJkt: decoded?.cnf?.jkt
-        });
-        if (!dpopVerification.valid) {
-            return response.unauthorized(res, dpopVerification.error || 'Invalid DPoP proof');
         }
 
         const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
@@ -133,15 +123,6 @@ const optionalAuth = async (req, res, next) => {
     try {
         const decoded = verifyToken(token);
         const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
-
-        const dpopVerification = await verifyDpopProof({
-            req,
-            accessToken: token,
-            expectedJkt: decoded?.cnf?.jkt
-        });
-        if (!dpopVerification.valid) {
-            return next();
-        }
 
         if (decoded.type === 'user') {
             const sessionValidation = await validateSession({

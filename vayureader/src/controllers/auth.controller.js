@@ -10,12 +10,11 @@ const User = require('../models/User');
 const { generateLifetimeUserToken } = require('../services/jwt.service');
 const { generateOtp, generateLoginToken, saveOtp, verifyOtp, shouldSkipSend } = require('../services/otp.service');
 const { createSession, revokeAllSessions, SESSION_TYPES } = require('../services/session.service');
-const { validateDpopPublicJwk } = require('../services/dpop.service');
 const { sendOtpSms } = require('../services/sms.service');
 const { logLogin, logDeviceChange, logNameChange } = require('../services/userAudit.service');
 const response = require('../utils/response');
 const { sanitizePhone, sanitizeName } = require('../utils/sanitize');
-const { server, dpop: dpopConfig } = require('../config/environment');
+const { server } = require('../config/environment');
 const { redisClient } = require('../config/redis');
 
 /**
@@ -113,7 +112,7 @@ const requestLoginOtp = async (req, res, next) => {
 const verifyLoginOtp = async (req, res, next) => {
     try {
         const phoneNumber = sanitizePhone(req.body.phone_number);
-        const { otp, deviceId, loginToken, dpopPublicKey } = req.body;
+        const { otp, deviceId, loginToken } = req.body;
 
 
 
@@ -130,15 +129,7 @@ const verifyLoginOtp = async (req, res, next) => {
             return response.badRequest(res, 'Login token is required. Please request OTP again.');
         }
 
-        let dpopJkt = null;
-        if (dpopConfig.enabled) {
-            const dpopKeyCheck = validateDpopPublicJwk(dpopPublicKey);
-            if (!dpopKeyCheck.valid) {
-                return response.badRequest(res, dpopKeyCheck.error);
-            }
-            dpopJkt = dpopKeyCheck.jkt;
-        }
-
+        // DPoP has been removed for mobile users
         const sanitizedDeviceId = deviceId.trim();
 
         // Find user
@@ -197,9 +188,7 @@ const verifyLoginOtp = async (req, res, next) => {
             name: user.name,
             tokenVersion
         };
-        if (dpopJkt) {
-            tokenPayload.cnf = { jkt: dpopJkt };
-        }
+        // Token Payload
         const token = generateLifetimeUserToken(user._id, tokenPayload);
 
         // Set HTTP-only cookie with long expiration
