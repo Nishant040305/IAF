@@ -175,16 +175,17 @@ const unifiedAuth = async (req, res, next) => {
         }
 
         const decoded = verifyToken(token);
-        const dpopVerification = await verifyDpopProof({
-            req,
-            accessToken: token,
-            expectedJkt: decoded?.cnf?.jkt
-        });
-        if (!dpopVerification.valid) {
-            return response.unauthorized(res, dpopVerification.error || 'Invalid DPoP proof');
-        }
 
         if (decoded.type === 'admin') {
+            const dpopVerification = await verifyDpopProof({
+                req,
+                accessToken: token,
+                expectedJkt: decoded?.cnf?.jkt
+            });
+            if (!dpopVerification.valid) {
+                return response.unauthorized(res, dpopVerification.error || 'Invalid DPoP proof');
+            }
+
             const decodedTokenVersion = Number.isInteger(decoded.tokenVersion) ? decoded.tokenVersion : 0;
             const sessionValidation = await validateSession({
                 sid: decoded.sid,
@@ -203,7 +204,7 @@ const unifiedAuth = async (req, res, next) => {
             if (cachedAdmin) {
                 admin = JSON.parse(cachedAdmin);
             } else {
-                // Fix Zombie Admin: Validate admin exists in DB even for unifiedAuth
+                // Fix Zombie Admin: Validate admin exists iyn DB even for unifiedAuth
                 admin = await Admin.findById(decoded.adminId)
                     .select('name contact permissions tokenVersion isVerified')
                     .lean();

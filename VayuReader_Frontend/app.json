@@ -17,7 +17,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "usesCleartextTraffic": false,
+      "usesCleartextTraffic": true,
       "package": "com.vayureader",
       "permissions": [
         "INTERNET"

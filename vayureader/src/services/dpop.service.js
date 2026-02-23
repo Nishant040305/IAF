@@ -14,7 +14,7 @@ const { dpop: dpopConfig } = require('../config/environment');
 
 const JTI_PREFIX = 'dpop:jti:';
 const JTI_REGEX = /^[A-Za-z0-9._~-]{12,200}$/;
-const QUERY_FALLBACK_PREFIXES = ['/api/events', '/uploads/'];
+const QUERY_FALLBACK_PREFIXES = ['/api/events', '/uploads/', '/api/pdfs/file/'];
 
 const sha256Base64Url = (input) => crypto.createHash('sha256').update(input).digest('base64url');
 

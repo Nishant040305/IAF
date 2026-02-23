@@ -24,6 +24,7 @@ export default function PdfDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [authLoaded, setAuthLoaded] = useState(false);
   const navigation = useNavigation();
 
   useLayoutEffect(() => {
@@ -38,7 +39,10 @@ export default function PdfDetails() {
 
   useEffect(() => {
     // Fetch auth token for authenticated file access
-    getToken().then(setToken);
+    getToken().then(t => {
+      setToken(t);
+      setAuthLoaded(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -60,7 +64,7 @@ export default function PdfDetails() {
     })();
   }, [id]);
 
-  if (loading) {
+  if (loading || !authLoaded) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#5B5FEF" />
@@ -76,8 +80,19 @@ export default function PdfDetails() {
     );
   }
 
+  const getFullUrl = (base: string, path: any) => {
+    if (!path) return '';
+    if (typeof path !== 'string') return path;
+    const cleanBase = base.endsWith('/') ? base.slice(0, -1) : base;
+    let cleanPath = path.startsWith('/') ? path : `/${path}`;
+    cleanPath = cleanPath.replace(/\\/g, '/'); // Handle Windows path backslashes
+    return `${cleanBase}${cleanPath}`;
+  };
+
+  const pdfUrl = doc.pdfUrl ? getFullUrl(PDF_BASE_URL, doc.pdfUrl) : '';
+
   const pdfSource = {
-    uri: `${PDF_BASE_URL}${doc.pdfUrl}`,
+    uri: pdfUrl,
     cache: true,
     ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
   };
