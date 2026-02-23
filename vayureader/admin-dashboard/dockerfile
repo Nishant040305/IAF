@@ -6,6 +6,14 @@ FROM node:20-alpine AS build
 # Set working directory
 WORKDIR /app
 
+# Accept Build Arguments
+ARG REACT_APP_API_BASE_URL
+ARG HTTPS
+
+# Set Environment Variables for Build
+ENV REACT_APP_API_BASE_URL=$REACT_APP_API_BASE_URL
+ENV HTTPS=$HTTPS
+
 # Copy package files and install dependencies
 COPY package*.json ./
 RUN npm install
