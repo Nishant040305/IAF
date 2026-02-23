@@ -8,7 +8,7 @@ import {
 } from './encryption';
 import { createDpopProof, clearDpopKeys } from './dpop';
 
-const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000';
+const BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 console.log('[API DEBUG] Base URL:', BASE_URL, 'ENV:', process.env.REACT_APP_API_BASE_URL);
 
 // =============================================================================
