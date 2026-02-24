@@ -9,3 +9,5 @@ nginx/certs/*.key
 nginx/certs/*.crt
 *.crt
 *.key
+
+vayureader_production_images.tar

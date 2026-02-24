@@ -5,12 +5,7 @@ services:
   # ADMIN DASHBOARD
   # ============================================================================
   admin-dashboard:
-    build:
-      context: ./admin-dashboard
-      dockerfile: dockerfile
-      args:
-        - REACT_APP_API_BASE_URL=${REACT_APP_API_BASE_URL}
-        - HTTPS=${HTTPS}
+    image: vayureader-admin-dashboard:latest
     container_name: vayureader_admin
     restart: unless-stopped
     networks:
@@ -20,10 +15,7 @@ services:
   # APP SERVICE (Node.js Backend)
   # ============================================================================
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
+    image: vayureader-app:latest
     container_name: vayureader_api
     restart: unless-stopped
     depends_on:
@@ -76,8 +68,6 @@ services:
       - mongo-data:/data/db
     networks:
       - backend-network
-    # In production, binding to localhost is handled by network isolation
-    # command: ["mongod", "--bind_ip_all"]
 
     # ============================================================================
     # REDIS
