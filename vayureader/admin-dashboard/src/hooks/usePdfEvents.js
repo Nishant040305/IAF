@@ -25,7 +25,7 @@ export function usePdfEvents({ onPdfAdded, onPdfUpdated, onPdfDeleted, enabled =
     const reconnectTimeoutRef = useRef(null);
 
     // Get the API base URL
-    const baseUrl = process.env.REACT_APP_API_BASE_URL || '';
+    const baseUrl = window.__ENV__?.REACT_APP_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || '';
 
     const connect = useCallback(async () => {
         // Clean up existing connection

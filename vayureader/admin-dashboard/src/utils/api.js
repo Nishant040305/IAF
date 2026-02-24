@@ -8,8 +8,8 @@ import {
 } from './encryption';
 import { createDpopProof, clearDpopKeys } from './dpop';
 
-const BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
-console.log('[API DEBUG] Base URL:', BASE_URL, 'ENV:', process.env.REACT_APP_API_BASE_URL);
+const BASE_URL = window.__ENV__?.REACT_APP_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || '';
+console.log('[API DEBUG] Base URL:', BASE_URL);
 
 // =============================================================================
 // EXCLUDED PATHS — never encrypted (login / recovery / public)

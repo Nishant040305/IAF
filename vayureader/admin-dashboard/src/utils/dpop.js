@@ -102,7 +102,7 @@ const getOrCreateKeyPair = async () => {
 };
 
 const normalizeRequestHtu = (requestUri) => {
-    const baseUrl = process.env.REACT_APP_API_BASE_URL || window.location.origin;
+    const baseUrl = window.__ENV__?.REACT_APP_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || window.location.origin;
     const parsed = new URL(requestUri, baseUrl);
     parsed.searchParams.delete('dpop');
     const query = parsed.searchParams.toString();
@@ -233,7 +233,7 @@ export async function createDpopProof({ method, requestUri, accessToken }) {
 }
 
 export function appendDpopQueryParam(requestUri, proof) {
-    const baseUrl = process.env.REACT_APP_API_BASE_URL || window.location.origin;
+    const baseUrl = window.__ENV__?.REACT_APP_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || window.location.origin;
     const parsed = new URL(requestUri, baseUrl);
     parsed.searchParams.set('dpop', proof);
     return parsed.toString();
