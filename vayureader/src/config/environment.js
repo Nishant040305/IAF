@@ -150,6 +150,19 @@ const dpop = {
     allowQueryProof: process.env.DPOP_ALLOW_QUERY_PROOF !== 'false'
 };
 
+/**
+ * PDF Security configuration
+ * 
+ * Security modes:
+ * - 'strict': Block critical, high, and medium threats (recommended for IAF)
+ * - 'moderate': Block critical and high threats only
+ * - 'permissive': Block only critical threats (not recommended)
+ */
+const pdfSecurity = {
+    scanMode: process.env.PDF_SECURITY_MODE || 'strict',
+    maxFileSizeMB: parseInt(process.env.MAX_UPLOAD_SIZE_MB || '100', 10)
+};
+
 module.exports = {
     server,
     database,
@@ -158,5 +171,6 @@ module.exports = {
     cors,
     rateLimit,
     redis,
-    dpop
+    dpop,
+    pdfSecurity
 };

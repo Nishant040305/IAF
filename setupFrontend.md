@@ -17,6 +17,14 @@ npm install
 npm run android  # or npm run ios
 ```
 
+### Local Development SSL Bypass (Self-Signed / Localhost Only)
+**Note:** If pointing to a production server with a valid SSL certificate (e.g., `https://reader.afcel.in`), no bypass is needed. Use the production URL in your `.env`.
+
+If you encounter "Network Error" when testing against a **local development backend** (self-signed):
+1. **Frontend `.env`**: Set `EXPO_PUBLIC_BACKEND_URL=http://10.0.2.2` (use `http` instead of `https`).
+2. **Android Security**: Ensure `VayuReader_Frontend/android/app/src/main/res/xml/network_security_config.xml` permits cleartext traffic.
+3. **Clean Start**: Restart the Expo server with `npx expo start --clear`.
+
 ### Optimized Release Build
 Generates a small APK (~30MB) instead of the default 200MB.
 ```bash

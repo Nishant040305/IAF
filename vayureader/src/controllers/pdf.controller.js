@@ -17,6 +17,7 @@ const { logPdfRead } = require('../services/userAudit.service');
 const response = require('../utils/response');
 const { escapeRegex } = require('../utils/sanitize');
 const { validateFileType, ALLOWED_TYPES, validateExtensionMatchesContent, validateSafeFilename } = require('../utils/fileValidator');
+const { scanPdfForThreats, SCAN_MODE, formatScanResult, getBlockedMessage } = require('../utils/pdfSecurityScanner');
 const { generateThumbnail } = require('../services/thumbnail.service');
 
 const { redisClient } = require('../config/redis');
@@ -230,6 +231,29 @@ const uploadPdf = async (req, res, next) => {
             return response.badRequest(res, `Security Warning: ${extCheck.error}`);
         }
 
+        // Security: Deep PDF content inspection for malicious elements
+        // Scans for: JavaScript, OpenAction, Launch actions, embedded files, XFA forms, etc.
+        // Using STRICT mode for IAF security requirements
+        const securityScan = await scanPdfForThreats(pdfFile.path, { 
+            mode: process.env.PDF_SECURITY_MODE || SCAN_MODE.STRICT 
+        });
+        
+        if (!securityScan.safe) {
+            await fs.unlink(pdfFile.path).catch(() => { });
+            console.warn(`[PDF Security] Upload blocked: ${formatScanResult(securityScan)}`);
+            
+            // Log security event for audit
+            await logCreate(RESOURCE_TYPES.PDF, null, req.admin, {
+                action: 'UPLOAD_BLOCKED',
+                reason: 'security_scan_failed',
+                filename: pdfFile.originalname,
+                threats: securityScan.threats.map(t => ({ name: t.name, level: t.level })),
+                scanMode: securityScan.mode
+            }).catch(() => {});
+            
+            return response.badRequest(res, getBlockedMessage(securityScan));
+        }
+
         const pdfUrl = `/uploads/${req.folderName}/${pdfFile.filename}`;
 
         // Auto-generate thumbnail from PDF page 1 (server-side)
@@ -313,6 +337,26 @@ const updatePdf = async (req, res, next) => {
             if (!extCheck.valid) {
                 await fs.unlink(pdfFile.path).catch(() => { });
                 return response.badRequest(res, `Security Warning: ${extCheck.error}`);
+            }
+
+            // Security: Deep PDF content inspection for malicious elements
+            const securityScan = await scanPdfForThreats(pdfFile.path, { 
+                mode: process.env.PDF_SECURITY_MODE || SCAN_MODE.STRICT 
+            });
+            
+            if (!securityScan.safe) {
+                await fs.unlink(pdfFile.path).catch(() => { });
+                console.warn(`[PDF Security] Update blocked: ${formatScanResult(securityScan)}`);
+                
+                await logUpdate(RESOURCE_TYPES.PDF, req.params.id, req.admin, {
+                    action: 'UPDATE_BLOCKED',
+                    reason: 'security_scan_failed',
+                    filename: pdfFile.originalname,
+                    threats: securityScan.threats.map(t => ({ name: t.name, level: t.level })),
+                    scanMode: securityScan.mode
+                }).catch(() => {});
+                
+                return response.badRequest(res, getBlockedMessage(securityScan));
             }
 
             updateData.pdfUrl = `/uploads/${req.folderName}/${pdfFile.filename}`;
