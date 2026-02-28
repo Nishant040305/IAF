@@ -1,9 +1,5 @@
-version: '3.8'
-
 services:
-  # ============================================================================
-  # ADMIN DASHBOARD
-  # ============================================================================
+
   admin-dashboard:
     image: vayureader-admin-dashboard:latest
     container_name: vayureader_admin
@@ -13,32 +9,50 @@ services:
     networks:
       - backend-network
 
-  # ============================================================================
-  # APP SERVICE (Node.js Backend)
-  # ============================================================================
+  mongo:
+    image: mongo:6-jammy
+    container_name: vayureader_db
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - backend-network
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: vayureader_cache
+    restart: unless-stopped
+    networks:
+      - backend-network
+
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    container_name: vayureader_search
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks:
+      - backend-network
+
   app:
     image: vayureader-app:latest
     container_name: vayureader_api
     restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/usr/src/app/uploads
     depends_on:
       - mongo
       - redis
-    env_file:
-      - .env
+      - elasticsearch
     networks:
       - backend-network
-    volumes:
-      - ./uploads:/usr/src/app/uploads
-    healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:5000/health" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
 
-  # ============================================================================
-  # NGINX (Reverse Proxy & Gateway)
-  # ============================================================================
   nginx:
     image: nginx:1.25-alpine
     container_name: vayureader_gateway
@@ -52,60 +66,10 @@ services:
       - ./nginx/certs:/etc/nginx/certs:ro
       - ./uploads:/usr/src/app/uploads:ro
     depends_on:
-      app:
-        condition: service_healthy
-      admin-dashboard:
-        condition: service_started
+      - app
     networks:
       - backend-network
 
-  # ============================================================================
-  # MONGODB
-  # ============================================================================
-  mongo:
-    image: mongo:6-jammy
-    container_name: vayureader_db
-    restart: unless-stopped
-    volumes:
-      - mongo-data:/data/db
-    networks:
-      - backend-network
-
-    # ============================================================================
-    # REDIS
-    # ============================================================================
-  redis:
-    image: redis:7.2-alpine
-    container_name: vayureader_cache
-    restart: unless-stopped
-    networks:
-      - backend-network
-
-  # ============================================================================
-  # ELASTICSEARCH (Search Engine)
-  # ============================================================================
-  elasticsearch:
-    image: elasticsearch:8.11.0
-    container_name: vayureader_search
-    restart: unless-stopped
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    networks:
-      - backend-network
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-# ==============================================================================
-# NETWORKS & VOLUMES
-# ==============================================================================
 networks:
   backend-network:
     driver: bridge
