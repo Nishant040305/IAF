@@ -83,11 +83,148 @@ const createContainsRegex = (str) => {
     return new RegExp(escapeRegex(str), 'i');
 };
 
+/**
+ * Pattern for safe tags/categories (alphanumeric, spaces, hyphens, underscores only).
+ * Blocks special characters that could be used for injection attacks.
+ */
+const SAFE_TAG_PATTERN = /^[a-zA-Z0-9\s\-_]+$/;
+
+/**
+ * Pattern for safe synonyms/antonyms (alphanumeric, spaces, hyphens, apostrophes).
+ * Slightly more permissive for natural language words.
+ */
+const SAFE_WORD_PATTERN = /^[a-zA-Z0-9\s\-']+$/;
+
+/**
+ * Validates and sanitizes a category/tag string.
+ * Blocks special characters that could be used for XSS, injection, etc.
+ * 
+ * @param {string} tag - Tag/category to validate
+ * @returns {{valid: boolean, sanitized: string|null, error: string|null}}
+ */
+const sanitizeTag = (tag) => {
+    if (!tag || typeof tag !== 'string') {
+        return { valid: false, sanitized: null, error: 'Tag is required' };
+    }
+
+    const trimmed = tag.trim();
+    
+    if (trimmed.length === 0) {
+        return { valid: false, sanitized: null, error: 'Tag cannot be empty' };
+    }
+
+    if (trimmed.length > 100) {
+        return { valid: false, sanitized: null, error: 'Tag cannot exceed 100 characters' };
+    }
+
+    if (!SAFE_TAG_PATTERN.test(trimmed)) {
+        return { 
+            valid: false, 
+            sanitized: null, 
+            error: 'Tag contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.' 
+        };
+    }
+
+    return { valid: true, sanitized: trimmed, error: null };
+};
+
+/**
+ * Validates and sanitizes a synonym/antonym word.
+ * 
+ * @param {string} word - Word to validate
+ * @returns {{valid: boolean, sanitized: string|null, error: string|null}}
+ */
+const sanitizeSynonym = (word) => {
+    if (!word || typeof word !== 'string') {
+        return { valid: false, sanitized: null, error: 'Word is required' };
+    }
+
+    const trimmed = word.trim();
+    
+    if (trimmed.length === 0) {
+        return { valid: false, sanitized: null, error: 'Word cannot be empty' };
+    }
+
+    if (trimmed.length > 100) {
+        return { valid: false, sanitized: null, error: 'Word cannot exceed 100 characters' };
+    }
+
+    if (!SAFE_WORD_PATTERN.test(trimmed)) {
+        return { 
+            valid: false, 
+            sanitized: null, 
+            error: 'Word contains invalid characters. Only letters, numbers, spaces, hyphens, and apostrophes are allowed.' 
+        };
+    }
+
+    return { valid: true, sanitized: trimmed, error: null };
+};
+
+/**
+ * Validates and sanitizes an array of tags/categories.
+ * Returns only valid tags, filtering out invalid ones.
+ * 
+ * @param {string[]} tags - Array of tags to validate
+ * @returns {{valid: string[], invalid: string[]}}
+ */
+const sanitizeTagArray = (tags) => {
+    if (!Array.isArray(tags)) {
+        return { valid: [], invalid: [] };
+    }
+
+    const valid = [];
+    const invalid = [];
+
+    for (const tag of tags) {
+        const result = sanitizeTag(tag);
+        if (result.valid) {
+            valid.push(result.sanitized);
+        } else {
+            invalid.push(tag);
+        }
+    }
+
+    return { valid, invalid };
+};
+
+/**
+ * Validates and sanitizes an array of synonyms/antonyms.
+ * Returns only valid words, filtering out invalid ones.
+ * 
+ * @param {string[]} words - Array of words to validate
+ * @returns {{valid: string[], invalid: string[]}}
+ */
+const sanitizeSynonymArray = (words) => {
+    if (!Array.isArray(words)) {
+        return { valid: [], invalid: [] };
+    }
+
+    const valid = [];
+    const invalid = [];
+
+    for (const word of words) {
+        const result = sanitizeSynonym(word);
+        if (result.valid) {
+            valid.push(result.sanitized);
+        } else {
+            invalid.push(word);
+        }
+    }
+
+    return { valid, invalid };
+};
+
 module.exports = {
     escapeRegex,
     isValidObjectId,
     sanitizePhone,
     sanitizeName,
     createExactMatchRegex,
-    createContainsRegex
+    createContainsRegex,
+    sanitizeTag,
+    sanitizeSynonym,
+    sanitizeTagArray,
+    sanitizeSynonymArray,
+    SAFE_TAG_PATTERN,
+    SAFE_WORD_PATTERN
 };

@@ -15,7 +15,7 @@ const { logCreate, logUpdate, logDelete, logRead, RESOURCE_TYPES } = require('..
 const { publishPdfEvent, PDF_EVENTS } = require('../services/pubsub.service');
 const { logPdfRead } = require('../services/userAudit.service');
 const response = require('../utils/response');
-const { escapeRegex } = require('../utils/sanitize');
+const { escapeRegex, sanitizeTag } = require('../utils/sanitize');
 const { validateFileType, ALLOWED_TYPES, validateExtensionMatchesContent, validateSafeFilename } = require('../utils/fileValidator');
 const { scanPdfForThreats, SCAN_MODE, formatScanResult, getBlockedMessage } = require('../utils/pdfSecurityScanner');
 const { generateThumbnail } = require('../services/thumbnail.service');
@@ -199,7 +199,8 @@ const getAdminPdfById = async (req, res, next) => {
  */
 const uploadPdf = async (req, res, next) => {
     try {
-        const { title, content, category } = req.body;
+        const { title, content } = req.body;
+        let { category } = req.body;
         const pdfFile = req.file;
 
         if (!pdfFile) {
@@ -208,6 +209,16 @@ const uploadPdf = async (req, res, next) => {
 
         if (!title) {
             return response.badRequest(res, 'Title is required');
+        }
+
+        // Security: Validate category for special characters
+        if (category) {
+            const categoryCheck = sanitizeTag(category);
+            if (!categoryCheck.valid) {
+                await fs.unlink(pdfFile.path).catch(() => { });
+                return response.badRequest(res, `Invalid category: ${categoryCheck.error}`);
+            }
+            category = categoryCheck.sanitized;
         }
 
         // Security: Validate original filename for path traversal
@@ -304,12 +315,23 @@ const uploadPdf = async (req, res, next) => {
  */
 const updatePdf = async (req, res, next) => {
     try {
-        const { title, content, category } = req.body;
+        const { title, content } = req.body;
+        let { category } = req.body;
         const pdfFile = req.file;
 
         const oldDoc = await PdfDocument.findById(req.params.id);
         if (!oldDoc) {
             return response.notFound(res, 'PDF not found');
+        }
+
+        // Security: Validate category for special characters
+        if (category !== undefined && category !== null && category !== '') {
+            const categoryCheck = sanitizeTag(category);
+            if (!categoryCheck.valid) {
+                if (pdfFile) await fs.unlink(pdfFile.path).catch(() => { });
+                return response.badRequest(res, `Invalid category: ${categoryCheck.error}`);
+            }
+            category = categoryCheck.sanitized;
         }
 
         const updateData = {};

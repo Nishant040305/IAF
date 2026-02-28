@@ -9,7 +9,7 @@
 const Word = require('../models/Word');
 const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
-const { escapeRegex, createExactMatchRegex } = require('../utils/sanitize');
+const { escapeRegex, createExactMatchRegex, sanitizeSynonymArray } = require('../utils/sanitize');
 
 const { redisClient } = require('../config/redis');
 const { invalidateWord, invalidateAllDictionaryCaches } = require('../services/cache.service');
@@ -203,18 +203,32 @@ const createWord = async (req, res, next) => {
             return response.badRequest(res, 'Word contains invalid special characters');
         }
 
-        const formattedMeanings = meanings.map(m => ({
-            partOfSpeech: m.partOfSpeech || null,
-            definition: m.definition,
-            synonyms: Array.isArray(m.synonyms) ? m.synonyms : [],
-            examples: Array.isArray(m.examples) ? m.examples : []
-        }));
+        // Security: Validate and sanitize synonyms/antonyms for special characters
+        const sanitizedSynonyms = sanitizeSynonymArray(Array.isArray(synonyms) ? synonyms : []);
+        const sanitizedAntonyms = sanitizeSynonymArray(Array.isArray(antonyms) ? antonyms : []);
+
+        if (sanitizedSynonyms.invalid.length > 0) {
+            return response.badRequest(res, `Invalid synonyms contain special characters: ${sanitizedSynonyms.invalid.join(', ')}`);
+        }
+        if (sanitizedAntonyms.invalid.length > 0) {
+            return response.badRequest(res, `Invalid antonyms contain special characters: ${sanitizedAntonyms.invalid.join(', ')}`);
+        }
+
+        const formattedMeanings = meanings.map(m => {
+            const meaningSynonyms = sanitizeSynonymArray(Array.isArray(m.synonyms) ? m.synonyms : []);
+            return {
+                partOfSpeech: m.partOfSpeech || null,
+                definition: m.definition,
+                synonyms: meaningSynonyms.valid,
+                examples: Array.isArray(m.examples) ? m.examples : []
+            };
+        });
 
         const newWord = new Word({
             word: word.toUpperCase(),
             meanings: formattedMeanings,
-            synonyms: Array.isArray(synonyms) ? synonyms : [],
-            antonyms: Array.isArray(antonyms) ? antonyms : []
+            synonyms: sanitizedSynonyms.valid,
+            antonyms: sanitizedAntonyms.valid
         });
 
         await newWord.save();
@@ -254,18 +268,32 @@ const updateWord = async (req, res, next) => {
             return response.badRequest(res, 'Word contains invalid special characters');
         }
 
-        const formattedMeanings = meanings.map(m => ({
-            partOfSpeech: m.partOfSpeech || null,
-            definition: m.definition,
-            synonyms: Array.isArray(m.synonyms) ? m.synonyms : [],
-            examples: Array.isArray(m.examples) ? m.examples : []
-        }));
+        // Security: Validate and sanitize synonyms/antonyms for special characters
+        const sanitizedSynonyms = sanitizeSynonymArray(Array.isArray(synonyms) ? synonyms : []);
+        const sanitizedAntonyms = sanitizeSynonymArray(Array.isArray(antonyms) ? antonyms : []);
+
+        if (sanitizedSynonyms.invalid.length > 0) {
+            return response.badRequest(res, `Invalid synonyms contain special characters: ${sanitizedSynonyms.invalid.join(', ')}`);
+        }
+        if (sanitizedAntonyms.invalid.length > 0) {
+            return response.badRequest(res, `Invalid antonyms contain special characters: ${sanitizedAntonyms.invalid.join(', ')}`);
+        }
+
+        const formattedMeanings = meanings.map(m => {
+            const meaningSynonyms = sanitizeSynonymArray(Array.isArray(m.synonyms) ? m.synonyms : []);
+            return {
+                partOfSpeech: m.partOfSpeech || null,
+                definition: m.definition,
+                synonyms: meaningSynonyms.valid,
+                examples: Array.isArray(m.examples) ? m.examples : []
+            };
+        });
 
         const updateData = {
             word: word.toUpperCase(),
             meanings: formattedMeanings,
-            synonyms: Array.isArray(synonyms) ? synonyms : [],
-            antonyms: Array.isArray(antonyms) ? antonyms : []
+            synonyms: sanitizedSynonyms.valid,
+            antonyms: sanitizedAntonyms.valid
         };
 
         const updated = await Word.findByIdAndUpdate(
@@ -352,11 +380,21 @@ const uploadDictionary = async (req, res, next) => {
                     continue;
                 }
 
+                // Security: Sanitize synonyms/antonyms in bulk upload
+                const bulkSynonyms = sanitizeSynonymArray(wordData.SYNONYMS || []);
+                const bulkAntonyms = sanitizeSynonymArray(wordData.ANTONYMS || []);
+
+                // Also sanitize meaning-level synonyms
+                const sanitizedMeanings = meanings.map(m => ({
+                    ...m,
+                    synonyms: sanitizeSynonymArray(m.synonyms || []).valid
+                }));
+
                 words.push({
                     word: wordKey.toUpperCase(),
-                    meanings,
-                    antonyms: wordData.ANTONYMS || [],
-                    synonyms: wordData.SYNONYMS || []
+                    meanings: sanitizedMeanings,
+                    antonyms: bulkAntonyms.valid,
+                    synonyms: bulkSynonyms.valid
                 });
                 processedCount++;
             } catch (error) {

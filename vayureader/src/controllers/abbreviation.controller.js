@@ -9,7 +9,7 @@
 const Abbreviation = require('../models/Abbreviation');
 const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
-const { escapeRegex, createExactMatchRegex } = require('../utils/sanitize');
+const { escapeRegex, createExactMatchRegex, sanitizeTag } = require('../utils/sanitize');
 
 const { redisClient } = require('../config/redis');
 const { invalidateAbbreviation, invalidateAllAbbreviationCaches } = require('../services/cache.service');
@@ -170,9 +170,15 @@ const createAbbreviation = async (req, res, next) => {
             return response.badRequest(res, 'Abbreviation contains invalid special characters');
         }
 
+        // Security: Validate fullForm for dangerous characters (XSS prevention)
+        const fullFormCheck = sanitizeTag(fullForm);
+        if (!fullFormCheck.valid) {
+            return response.badRequest(res, `Invalid full form: ${fullFormCheck.error}`);
+        }
+
         const newAbbr = new Abbreviation({
             abbreviation: abbreviation.toUpperCase(),
-            fullForm
+            fullForm: fullFormCheck.sanitized
         });
 
         await newAbbr.save();
@@ -209,11 +215,17 @@ const updateAbbreviation = async (req, res, next) => {
             return response.badRequest(res, 'Abbreviation contains invalid special characters');
         }
 
+        // Security: Validate fullForm for dangerous characters (XSS prevention)
+        const fullFormCheck = sanitizeTag(fullForm);
+        if (!fullFormCheck.valid) {
+            return response.badRequest(res, `Invalid full form: ${fullFormCheck.error}`);
+        }
+
         const updated = await Abbreviation.findByIdAndUpdate(
             req.params.id,
             {
                 abbreviation: abbreviation.toUpperCase(),
-                fullForm
+                fullForm: fullFormCheck.sanitized
             },
             { new: true, runValidators: true }
         );
@@ -277,7 +289,13 @@ const bulkUpload = async (req, res, next) => {
         }
 
         const strictWordPattern = /^[a-zA-Z0-9\s\-'.\/()]+$/;
-        const validAbbreviations = abbreviations.filter(item => strictWordPattern.test(item.abbreviation));
+        
+        // Security: Filter and sanitize both abbreviation and fullForm
+        const validAbbreviations = abbreviations.filter(item => {
+            if (!strictWordPattern.test(item.abbreviation)) return false;
+            const fullFormCheck = sanitizeTag(item.fullForm);
+            return fullFormCheck.valid;
+        });
 
         if (validAbbreviations.length === 0) {
             return response.badRequest(res, 'No valid abbreviations found');
@@ -285,7 +303,7 @@ const bulkUpload = async (req, res, next) => {
 
         const formatted = validAbbreviations.map(item => ({
             abbreviation: item.abbreviation.toUpperCase(),
-            fullForm: item.fullForm
+            fullForm: sanitizeTag(item.fullForm).sanitized
         }));
 
         // Use insertMany with ordered: false to skip duplicates instead of failing
