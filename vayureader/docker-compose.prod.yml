@@ -39,9 +39,6 @@ services:
       - backend-network
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: vayureader-app:latest
     container_name: vayureader_api
     restart: unless-stopped

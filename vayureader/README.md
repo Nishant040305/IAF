@@ -146,6 +146,7 @@ src/
 - ✅ Whitelist-based CORS
 - ✅ Fail-fast on missing secrets
 - ✅ Secure file upload with type validation
+- ✅ Multi-layer PDF protection (deep scan + sanitization rewrite)
 - ✅ Audit logging for all admin actions
 
 ## Environment Variables

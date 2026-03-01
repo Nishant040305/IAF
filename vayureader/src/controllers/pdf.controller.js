@@ -18,6 +18,7 @@ const response = require('../utils/response');
 const { escapeRegex, sanitizeTag } = require('../utils/sanitize');
 const { validateFileType, ALLOWED_TYPES, validateExtensionMatchesContent, validateSafeFilename } = require('../utils/fileValidator');
 const { scanPdfForThreats, SCAN_MODE, formatScanResult, getBlockedMessage } = require('../utils/pdfSecurityScanner');
+const { sanitizePdfInPlace } = require('../utils/pdfSanitizer');
 const { generateThumbnail } = require('../services/thumbnail.service');
 
 const { redisClient } = require('../config/redis');
@@ -242,11 +243,12 @@ const uploadPdf = async (req, res, next) => {
             return response.badRequest(res, `Security Warning: ${extCheck.error}`);
         }
 
-        // Security: Deep PDF content inspection for malicious elements
+        const pdfSecurityMode = process.env.PDF_SECURITY_MODE || SCAN_MODE.STRICT;
+
+        // Security Layer 1: Deep custom PDF content inspection
         // Scans for: JavaScript, OpenAction, Launch actions, embedded files, XFA forms, etc.
-        // Using STRICT mode for IAF security requirements
-        const securityScan = await scanPdfForThreats(pdfFile.path, { 
-            mode: process.env.PDF_SECURITY_MODE || SCAN_MODE.STRICT 
+        const securityScan = await scanPdfForThreats(pdfFile.path, {
+            mode: pdfSecurityMode
         });
         
         if (!securityScan.safe) {
@@ -263,6 +265,44 @@ const uploadPdf = async (req, res, next) => {
             }).catch(() => {});
             
             return response.badRequest(res, getBlockedMessage(securityScan));
+        }
+
+        // Security Layer 2: Sanitize the stored PDF (rewrite clean structure in-place)
+        try {
+            await sanitizePdfInPlace(pdfFile.path);
+        } catch (sanitizeError) {
+            await fs.unlink(pdfFile.path).catch(() => { });
+            await logCreate(RESOURCE_TYPES.PDF, null, req.admin, {
+                action: 'UPLOAD_BLOCKED',
+                reason: 'pdf_sanitization_failed',
+                filename: pdfFile.originalname,
+                error: sanitizeError.message
+            }).catch(() => {});
+            return response.badRequest(res, `PDF rejected: Sanitization failed (${sanitizeError.message})`);
+        }
+
+        // Re-validate sanitized output before persistence.
+        const sanitizedTypeCheck = await validateFileType(pdfFile.path, ALLOWED_TYPES.pdf);
+        if (!sanitizedTypeCheck.valid) {
+            await fs.unlink(pdfFile.path).catch(() => { });
+            return response.badRequest(res, 'PDF rejected: Sanitized output is invalid');
+        }
+
+        // Ensure the sanitized file still passes strict security policy.
+        const postSanitizeScan = await scanPdfForThreats(pdfFile.path, {
+            mode: pdfSecurityMode
+        });
+        if (!postSanitizeScan.safe) {
+            await fs.unlink(pdfFile.path).catch(() => { });
+            console.warn(`[PDF Security] Upload blocked after sanitization: ${formatScanResult(postSanitizeScan)}`);
+            await logCreate(RESOURCE_TYPES.PDF, null, req.admin, {
+                action: 'UPLOAD_BLOCKED',
+                reason: 'post_sanitize_scan_failed',
+                filename: pdfFile.originalname,
+                threats: postSanitizeScan.threats.map(t => ({ name: t.name, level: t.level })),
+                scanMode: postSanitizeScan.mode
+            }).catch(() => {});
+            return response.badRequest(res, getBlockedMessage(postSanitizeScan));
         }
 
         const pdfUrl = `/uploads/${req.folderName}/${pdfFile.filename}`;
@@ -361,9 +401,11 @@ const updatePdf = async (req, res, next) => {
                 return response.badRequest(res, `Security Warning: ${extCheck.error}`);
             }
 
-            // Security: Deep PDF content inspection for malicious elements
-            const securityScan = await scanPdfForThreats(pdfFile.path, { 
-                mode: process.env.PDF_SECURITY_MODE || SCAN_MODE.STRICT 
+            const pdfSecurityMode = process.env.PDF_SECURITY_MODE || SCAN_MODE.STRICT;
+
+            // Security Layer 1: Deep custom PDF content inspection.
+            const securityScan = await scanPdfForThreats(pdfFile.path, {
+                mode: pdfSecurityMode
             });
             
             if (!securityScan.safe) {
@@ -379,6 +421,44 @@ const updatePdf = async (req, res, next) => {
                 }).catch(() => {});
                 
                 return response.badRequest(res, getBlockedMessage(securityScan));
+            }
+
+            // Security Layer 2: Sanitize the stored PDF (rewrite clean structure in-place).
+            try {
+                await sanitizePdfInPlace(pdfFile.path);
+            } catch (sanitizeError) {
+                await fs.unlink(pdfFile.path).catch(() => { });
+                await logUpdate(RESOURCE_TYPES.PDF, req.params.id, req.admin, {
+                    action: 'UPDATE_BLOCKED',
+                    reason: 'pdf_sanitization_failed',
+                    filename: pdfFile.originalname,
+                    error: sanitizeError.message
+                }).catch(() => {});
+                return response.badRequest(res, `PDF rejected: Sanitization failed (${sanitizeError.message})`);
+            }
+
+            // Re-validate sanitized output before persistence.
+            const sanitizedTypeCheck = await validateFileType(pdfFile.path, ALLOWED_TYPES.pdf);
+            if (!sanitizedTypeCheck.valid) {
+                await fs.unlink(pdfFile.path).catch(() => { });
+                return response.badRequest(res, 'PDF rejected: Sanitized output is invalid');
+            }
+
+            // Ensure the sanitized file still passes strict security policy.
+            const postSanitizeScan = await scanPdfForThreats(pdfFile.path, {
+                mode: pdfSecurityMode
+            });
+            if (!postSanitizeScan.safe) {
+                await fs.unlink(pdfFile.path).catch(() => { });
+                console.warn(`[PDF Security] Update blocked after sanitization: ${formatScanResult(postSanitizeScan)}`);
+                await logUpdate(RESOURCE_TYPES.PDF, req.params.id, req.admin, {
+                    action: 'UPDATE_BLOCKED',
+                    reason: 'post_sanitize_scan_failed',
+                    filename: pdfFile.originalname,
+                    threats: postSanitizeScan.threats.map(t => ({ name: t.name, level: t.level })),
+                    scanMode: postSanitizeScan.mode
+                }).catch(() => {});
+                return response.badRequest(res, getBlockedMessage(postSanitizeScan));
             }
 
             updateData.pdfUrl = `/uploads/${req.folderName}/${pdfFile.filename}`;

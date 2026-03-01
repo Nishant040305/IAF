@@ -209,15 +209,16 @@ const DANGEROUS_PATTERNS = [
         description: 'PDF contains XFA forms (complex, potentially vulnerable)'
     },
     
-    // ObjStm (Object Streams) - MEDIUM (can hide malicious objects)
+    // ObjStm (Object Streams) - LOW
+    // Common in modern PDFs; keep as warning while other layers (AV + sanitization) protect on upload.
     {
         name: 'ObjectStreams',
         patterns: [
             /\/ObjStm/gi,
             /\/Type\s*\/ObjStm/gi
         ],
-        level: THREAT_LEVEL.MEDIUM,
-        description: 'PDF uses object streams (can hide malicious content)'
+        level: THREAT_LEVEL.LOW,
+        description: 'PDF uses object streams (logged as warning)'
     },
     
     // Encrypted content - MEDIUM (can hide malicious content from scanners)
