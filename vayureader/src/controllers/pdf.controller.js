@@ -331,7 +331,12 @@ const updatePdf = async (req, res, next) => {
         let { title, content } = req.body;
         let { category } = req.body;
         const pdfFile = req.file;
-
+        if (title === undefined || title === "") {
+            return response.badRequest(res, 'Title is required');
+        }
+        if (category == undefined || category === "") {
+            return response.badRequest(res, 'Category is required');
+        }
         const oldDoc = await PdfDocument.findById(req.params.id);
         if (!oldDoc) {
             return response.notFound(res, 'PDF not found');
@@ -346,13 +351,21 @@ const updatePdf = async (req, res, next) => {
             }
             category = categoryCheck.sanitized;
         }
-        if (title === undefined && title !== "") {
+        if (title !== undefined && title !== "") {
             const titleCheck = sanitizeTag(title);
             if (!titleCheck.valid) {
                 if (pdfFile) await fs.unlink(pdfFile.path).catch(() => { });
                 return response.badRequest(res, `Invalid title: ${titleCheck.error}`);
             }
             title = titleCheck.sanitized;
+        }
+        if (content !== undefined && content !== "") {
+            const contentCheck = sanitizeTag(content);
+            if (!contentCheck.valid) {
+                if (pdfFile) await fs.unlink(pdfFile.path).catch(() => { });
+                return response.badRequest(res, `Invalid content: ${contentCheck.error}`);
+            }
+            content = contentCheck.sanitized;
         }
         const updateData = {};
         if (title) updateData.title = title;
