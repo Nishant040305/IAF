@@ -43,10 +43,11 @@ const DANGEROUS_PATTERNS = [
     {
         name: 'JavaScript',
         patterns: [
-            /\/JavaScript\s/gi,
-            /\/JS\s*\(/gi,
-            /\/JS\s*</gi,
-            /\/S\s*\/JavaScript/gi
+            // Focus on executable action constructs to reduce false positives
+            // from incidental "/JavaScript" tokens in non-executable content.
+            /\/S\s*\/JavaScript\b/gi,
+            /\/JS\s*(?:\(|<)/gi,
+            /\/JavaScript\s*(?:<<|\d+\s+\d+\s+R)/gi
         ],
         level: THREAT_LEVEL.CRITICAL,
         description: 'PDF contains JavaScript code which can execute malicious actions'

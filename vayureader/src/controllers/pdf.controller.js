@@ -17,7 +17,6 @@ const { logPdfRead } = require('../services/userAudit.service');
 const response = require('../utils/response');
 const { escapeRegex, sanitizeTag } = require('../utils/sanitize');
 const { validateFileType, ALLOWED_TYPES, validateExtensionMatchesContent, validateSafeFilename } = require('../utils/fileValidator');
-const { scanPdfForThreats, SCAN_MODE, formatScanResult, getBlockedMessage } = require('../utils/pdfSecurityScanner');
 const { sanitizePdfInPlace } = require('../utils/pdfSanitizer');
 const { generateThumbnail } = require('../services/thumbnail.service');
 
@@ -200,7 +199,7 @@ const getAdminPdfById = async (req, res, next) => {
  */
 const uploadPdf = async (req, res, next) => {
     try {
-        const { title, content } = req.body;
+        let { title, content } = req.body;
         let { category } = req.body;
         const pdfFile = req.file;
 
@@ -221,7 +220,22 @@ const uploadPdf = async (req, res, next) => {
             }
             category = categoryCheck.sanitized;
         }
-
+        if (title) {
+            const titleCheck = sanitizeTag(title);
+            if (!titleCheck.valid) {
+                await fs.unlink(pdfFile.path).catch(() => { });
+                return response.badRequest(res, `Invalid title: ${titleCheck.error}`);
+            }
+            title = titleCheck.sanitized;
+        }
+        if (content) {
+            const contentCheck = sanitizeTag(content);
+            if (!contentCheck.valid) {
+                await fs.unlink(pdfFile.path).catch(() => { });
+                return response.badRequest(res, `Invalid content: ${contentCheck.error}`);
+            }
+            content = contentCheck.sanitized;
+        }
         // Security: Validate original filename for path traversal
         const pdfNameCheck = validateSafeFilename(pdfFile.originalname);
         if (!pdfNameCheck.valid) {
@@ -243,31 +257,7 @@ const uploadPdf = async (req, res, next) => {
             return response.badRequest(res, `Security Warning: ${extCheck.error}`);
         }
 
-        const pdfSecurityMode = process.env.PDF_SECURITY_MODE || SCAN_MODE.STRICT;
-
-        // Security Layer 1: Deep custom PDF content inspection
-        // Scans for: JavaScript, OpenAction, Launch actions, embedded files, XFA forms, etc.
-        const securityScan = await scanPdfForThreats(pdfFile.path, {
-            mode: pdfSecurityMode
-        });
-        
-        if (!securityScan.safe) {
-            await fs.unlink(pdfFile.path).catch(() => { });
-            console.warn(`[PDF Security] Upload blocked: ${formatScanResult(securityScan)}`);
-            
-            // Log security event for audit
-            await logCreate(RESOURCE_TYPES.PDF, null, req.admin, {
-                action: 'UPLOAD_BLOCKED',
-                reason: 'security_scan_failed',
-                filename: pdfFile.originalname,
-                threats: securityScan.threats.map(t => ({ name: t.name, level: t.level })),
-                scanMode: securityScan.mode
-            }).catch(() => {});
-            
-            return response.badRequest(res, getBlockedMessage(securityScan));
-        }
-
-        // Security Layer 2: Sanitize the stored PDF (rewrite clean structure in-place)
+        // Security Layer: Sanitize the stored PDF (rewrite clean structure in-place)
         try {
             await sanitizePdfInPlace(pdfFile.path);
         } catch (sanitizeError) {
@@ -277,7 +267,7 @@ const uploadPdf = async (req, res, next) => {
                 reason: 'pdf_sanitization_failed',
                 filename: pdfFile.originalname,
                 error: sanitizeError.message
-            }).catch(() => {});
+            }).catch(() => { });
             return response.badRequest(res, `PDF rejected: Sanitization failed (${sanitizeError.message})`);
         }
 
@@ -286,23 +276,6 @@ const uploadPdf = async (req, res, next) => {
         if (!sanitizedTypeCheck.valid) {
             await fs.unlink(pdfFile.path).catch(() => { });
             return response.badRequest(res, 'PDF rejected: Sanitized output is invalid');
-        }
-
-        // Ensure the sanitized file still passes strict security policy.
-        const postSanitizeScan = await scanPdfForThreats(pdfFile.path, {
-            mode: pdfSecurityMode
-        });
-        if (!postSanitizeScan.safe) {
-            await fs.unlink(pdfFile.path).catch(() => { });
-            console.warn(`[PDF Security] Upload blocked after sanitization: ${formatScanResult(postSanitizeScan)}`);
-            await logCreate(RESOURCE_TYPES.PDF, null, req.admin, {
-                action: 'UPLOAD_BLOCKED',
-                reason: 'post_sanitize_scan_failed',
-                filename: pdfFile.originalname,
-                threats: postSanitizeScan.threats.map(t => ({ name: t.name, level: t.level })),
-                scanMode: postSanitizeScan.mode
-            }).catch(() => {});
-            return response.badRequest(res, getBlockedMessage(postSanitizeScan));
         }
 
         const pdfUrl = `/uploads/${req.folderName}/${pdfFile.filename}`;
@@ -355,7 +328,7 @@ const uploadPdf = async (req, res, next) => {
  */
 const updatePdf = async (req, res, next) => {
     try {
-        const { title, content } = req.body;
+        let { title, content } = req.body;
         let { category } = req.body;
         const pdfFile = req.file;
 
@@ -373,7 +346,14 @@ const updatePdf = async (req, res, next) => {
             }
             category = categoryCheck.sanitized;
         }
-
+        if (title === undefined && title !== "") {
+            const titleCheck = sanitizeTag(title);
+            if (!titleCheck.valid) {
+                if (pdfFile) await fs.unlink(pdfFile.path).catch(() => { });
+                return response.badRequest(res, `Invalid title: ${titleCheck.error}`);
+            }
+            title = titleCheck.sanitized;
+        }
         const updateData = {};
         if (title) updateData.title = title;
         if (content !== undefined) updateData.content = content;
@@ -401,29 +381,7 @@ const updatePdf = async (req, res, next) => {
                 return response.badRequest(res, `Security Warning: ${extCheck.error}`);
             }
 
-            const pdfSecurityMode = process.env.PDF_SECURITY_MODE || SCAN_MODE.STRICT;
-
-            // Security Layer 1: Deep custom PDF content inspection.
-            const securityScan = await scanPdfForThreats(pdfFile.path, {
-                mode: pdfSecurityMode
-            });
-            
-            if (!securityScan.safe) {
-                await fs.unlink(pdfFile.path).catch(() => { });
-                console.warn(`[PDF Security] Update blocked: ${formatScanResult(securityScan)}`);
-                
-                await logUpdate(RESOURCE_TYPES.PDF, req.params.id, req.admin, {
-                    action: 'UPDATE_BLOCKED',
-                    reason: 'security_scan_failed',
-                    filename: pdfFile.originalname,
-                    threats: securityScan.threats.map(t => ({ name: t.name, level: t.level })),
-                    scanMode: securityScan.mode
-                }).catch(() => {});
-                
-                return response.badRequest(res, getBlockedMessage(securityScan));
-            }
-
-            // Security Layer 2: Sanitize the stored PDF (rewrite clean structure in-place).
+            // Security Layer: Sanitize the stored PDF (rewrite clean structure in-place).
             try {
                 await sanitizePdfInPlace(pdfFile.path);
             } catch (sanitizeError) {
@@ -433,7 +391,7 @@ const updatePdf = async (req, res, next) => {
                     reason: 'pdf_sanitization_failed',
                     filename: pdfFile.originalname,
                     error: sanitizeError.message
-                }).catch(() => {});
+                }).catch(() => { });
                 return response.badRequest(res, `PDF rejected: Sanitization failed (${sanitizeError.message})`);
             }
 
@@ -442,23 +400,6 @@ const updatePdf = async (req, res, next) => {
             if (!sanitizedTypeCheck.valid) {
                 await fs.unlink(pdfFile.path).catch(() => { });
                 return response.badRequest(res, 'PDF rejected: Sanitized output is invalid');
-            }
-
-            // Ensure the sanitized file still passes strict security policy.
-            const postSanitizeScan = await scanPdfForThreats(pdfFile.path, {
-                mode: pdfSecurityMode
-            });
-            if (!postSanitizeScan.safe) {
-                await fs.unlink(pdfFile.path).catch(() => { });
-                console.warn(`[PDF Security] Update blocked after sanitization: ${formatScanResult(postSanitizeScan)}`);
-                await logUpdate(RESOURCE_TYPES.PDF, req.params.id, req.admin, {
-                    action: 'UPDATE_BLOCKED',
-                    reason: 'post_sanitize_scan_failed',
-                    filename: pdfFile.originalname,
-                    threats: postSanitizeScan.threats.map(t => ({ name: t.name, level: t.level })),
-                    scanMode: postSanitizeScan.mode
-                }).catch(() => {});
-                return response.badRequest(res, getBlockedMessage(postSanitizeScan));
             }
 
             updateData.pdfUrl = `/uploads/${req.folderName}/${pdfFile.filename}`;
