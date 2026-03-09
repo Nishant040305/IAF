@@ -1,12 +1,12 @@
 import { useNavigation } from '@react-navigation/native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Pdf from 'react-native-pdf';
 
 import { PDF_BASE_URL } from '@/constants/config';
+import { useAuth } from '@/contexts/AuthContext';
 import apiClient from '@/lib/apiClient';
-import { getToken } from '@/lib/authStorage';
 
 type PdfDocument = {
   _id: string;
@@ -18,13 +18,47 @@ type PdfDocument = {
   category: string;
 };
 
+const formatAccessedAt = (value: Date) => {
+  const pad = (input: number) => String(input).padStart(2, '0');
+  const day = pad(value.getDate());
+  const month = pad(value.getMonth() + 1);
+  const year = value.getFullYear();
+  const hours = pad(value.getHours());
+  const minutes = pad(value.getMinutes());
+  const seconds = pad(value.getSeconds());
+
+  return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+};
+
+const buildWatermarkItems = (width: number, height: number) => {
+  const columns = 4;
+  const rows = 7;
+  const horizontalStep = width / columns;
+  const verticalStep = height / rows;
+  const items: { key: string; left: number; top: number }[] = [];
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const rowOffset = row % 2 === 0 ? 0 : horizontalStep * 0.35;
+      items.push({
+        key: `${row}-${column}`,
+        left: column * horizontalStep + rowOffset - 24,
+        top: row * verticalStep + verticalStep * 0.16,
+      });
+    }
+  }
+
+  return items;
+};
+
 export default function PdfDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { token, user, initializing } = useAuth();
+  const { width, height } = useWindowDimensions();
   const [doc, setDoc] = useState<PdfDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [authLoaded, setAuthLoaded] = useState(false);
+  const [accessedAt, setAccessedAt] = useState(() => formatAccessedAt(new Date()));
   const navigation = useNavigation();
 
   useLayoutEffect(() => {
@@ -38,12 +72,10 @@ export default function PdfDetails() {
   }, [doc, navigation]);
 
   useEffect(() => {
-    // Fetch auth token for authenticated file access
-    getToken().then(t => {
-      setToken(t);
-      setAuthLoaded(true);
-    });
-  }, []);
+    if (id) {
+      setAccessedAt(formatAccessedAt(new Date()));
+    }
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -64,7 +96,7 @@ export default function PdfDetails() {
     })();
   }, [id]);
 
-  if (loading || !authLoaded) {
+  if (loading || initializing) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#5B5FEF" />
@@ -90,6 +122,8 @@ export default function PdfDetails() {
   };
 
   const pdfUrl = doc.pdfUrl ? getFullUrl(PDF_BASE_URL, doc.pdfUrl) : '';
+  const watermarkLabel = `${user?.phone_number ?? 'Unknown user'} | ${accessedAt}`;
+  const watermarkItems = buildWatermarkItems(width, height);
 
   const pdfSource = {
     uri: pdfUrl,
@@ -111,12 +145,28 @@ export default function PdfDetails() {
       <View style={styles.container}>
         <Pdf
           source={pdfSource}
-          style={styles.pdf}
+          style={[styles.pdf, { width }]}
           trustAllCerts={false}
           onLoadComplete={() => {
             // Loaded
           }}
         />
+        <View pointerEvents="none" style={styles.watermarkLayer}>
+          {watermarkItems.map(item => (
+            <Text
+              key={item.key}
+              style={[
+                styles.watermarkText,
+                {
+                  left: item.left,
+                  top: item.top,
+                },
+              ]}
+            >
+              {watermarkLabel}
+            </Text>
+          ))}
+        </View>
       </View>
     </>
   );
@@ -136,6 +186,18 @@ const styles = StyleSheet.create({
   },
   pdf: {
     flex: 1,
-    width: Dimensions.get('window').width,
+  },
+  watermarkLayer: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  watermarkText: {
+    position: 'absolute',
+    width: 260,
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '700',
+    opacity: 0.26,
+    transform: [{ rotate: '-24deg' }],
   },
 });
