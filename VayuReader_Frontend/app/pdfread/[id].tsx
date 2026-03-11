@@ -22,17 +22,16 @@ const formatAccessedAt = (value: Date) => {
   const pad = (input: number) => String(input).padStart(2, '0');
   const day = pad(value.getDate());
   const month = pad(value.getMonth() + 1);
-  const year = value.getFullYear();
+  const year = String(value.getFullYear())
   const hours = pad(value.getHours());
   const minutes = pad(value.getMinutes());
-  const seconds = pad(value.getSeconds());
 
-  return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
 };
 
 const buildWatermarkItems = (width: number, height: number) => {
-  const columns = 4;
-  const rows = 7;
+  const columns = 3;
+  const rows = 6;
   const horizontalStep = width / columns;
   const verticalStep = height / rows;
   const items: { key: string; left: number; top: number }[] = [];
@@ -122,7 +121,7 @@ export default function PdfDetails() {
   };
 
   const pdfUrl = doc.pdfUrl ? getFullUrl(PDF_BASE_URL, doc.pdfUrl) : '';
-  const watermarkLabel = `${user?.phone_number ?? 'Unknown user'} | ${accessedAt}`;
+  const watermarkLabel = `${user?.phone_number ?? 'Unknown user'} ${accessedAt}`;
   const watermarkItems = buildWatermarkItems(width, height);
 
   const pdfSource = {
@@ -194,8 +193,8 @@ const styles = StyleSheet.create({
   watermarkText: {
     position: 'absolute',
     width: 260,
-    color: '#111827',
-    fontSize: 14,
+    color: '#374151',
+    fontSize: 15,
     fontWeight: '700',
     opacity: 0.26,
     transform: [{ rotate: '-24deg' }],

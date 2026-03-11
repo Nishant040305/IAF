@@ -33,7 +33,7 @@ services:
     volumes:
       - ./uploads:/usr/src/app/uploads
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:5000/health" ]
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3000/health" ]
       interval: 5s
       timeout: 5s
       retries: 5
