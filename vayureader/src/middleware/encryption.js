@@ -18,6 +18,7 @@ const { encrypt, decrypt, deriveKey } = require('../services/encryption.service'
 const { decodeToken } = require('../services/jwt.service');
 const { redisClient } = require('../config/redis');
 const response = require('../utils/response');
+const { server } = require('../config/environment');
 const fs = require('fs').promises;
 const crypto = require('crypto');
 const path = require('path');
@@ -90,6 +91,11 @@ const extractIdentity = (req) => {
 // =============================================================================
 
 const e2eeMiddleware = (req, res, next) => {
+    // SECURITY_BYPASS: skip all encryption/decryption
+    if (server.securityBypass) {
+        return next();
+    }
+
     if (isExcluded(req.originalUrl || req.url)) {
         return next();
     }
@@ -155,6 +161,11 @@ const cleanupUploadedFile = async (req) => {
 };
 
 const verifyMultipartE2EESignature = async (req, res, next) => {
+    // SECURITY_BYPASS: skip multipart E2EE signature verification
+    if (server.securityBypass) {
+        return next();
+    }
+
     try {
         if (!req._e2eeIdentity) return next();
 

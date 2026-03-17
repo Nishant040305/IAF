@@ -1,77 +1,55 @@
 /**
  * User Audit Controller
  * 
- * Handles user audit log queries for admin dashboard.
+ * Handles user audit log queries with filtering, pagination, and analytics.
  * 
  * @module controllers/userAudit.controller
  */
 
-const UserAudit = require('../models/UserAudit');
-const { escapeRegex } = require('../utils/sanitize');
+const { UserAuditRepository } = require('../repositories');
 const response = require('../utils/response');
+const { escapeRegex } = require('../utils/sanitize');
 
 /**
- * Get paginated user audit logs with optional filters.
+ * Get user audit logs with optional filters.
+ * Query params: action, phone, deviceId, startDate, endDate, page, limit
  */
-const getLogs = async (req, res, next) => {
+const getUserAuditLogs = async (req, res, next) => {
     try {
-        const {
-            page = 1,
-            limit = 50,
-            action,
-            phone_number,
-            userId,
-            deviceId,
-            startDate,
-            endDate
-        } = req.query;
+        const { action, phone, deviceId, startDate, endDate } = req.query;
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+        const skip = (page - 1) * limit;
 
         // Build filter
         const filter = {};
+        if (action) filter.action = action;
+        if (phone) filter.phone_number = { $regex: phone };
+        if (deviceId) filter.deviceId = { $regex: deviceId };
 
-        if (action) {
-            filter.action = action;
-        }
-
-        if (phone_number) {
-            const safePhone = escapeRegex(phone_number);
-            filter.phone_number = { $regex: safePhone, $options: 'i' };
-        }
-
-        if (userId) {
-            filter.userId = userId;
-        }
-
-        if (deviceId) {
-            const safeDeviceId = escapeRegex(deviceId);
-            filter.deviceId = { $regex: safeDeviceId, $options: 'i' };
-        }
-
+        // Date range filter
         if (startDate || endDate) {
             filter.timestamp = {};
             if (startDate) filter.timestamp.$gte = new Date(startDate);
             if (endDate) filter.timestamp.$lte = new Date(endDate);
         }
 
-        const skip = (parseInt(page) - 1) * parseInt(limit);
-        const limitNum = Math.min(parseInt(limit), 100); // Cap at 100
-
         const [logs, total] = await Promise.all([
-            UserAudit.find(filter)
-                .sort({ timestamp: -1 })
-                .skip(skip)
-                .limit(limitNum)
-                .lean(),
-            UserAudit.countDocuments(filter)
+            UserAuditRepository.find(filter, {
+                sort: { timestamp: -1 },
+                skip,
+                limit
+            }),
+            UserAuditRepository.count(filter)
         ]);
 
         response.success(res, {
             logs,
             pagination: {
-                page: parseInt(page),
-                limit: limitNum,
+                page,
+                limit,
                 total,
-                pages: Math.ceil(total / limitNum)
+                totalPages: Math.ceil(total / limit)
             }
         });
     } catch (error) {
@@ -80,85 +58,20 @@ const getLogs = async (req, res, next) => {
 };
 
 /**
- * Get user audit statistics.
+ * Get user audit statistics (aggregations).
  */
-const getStats = async (req, res, next) => {
+const getUserAuditStats = async (req, res, next) => {
     try {
-        const [byAction, loginsByDay, topUsers, totalLogs] = await Promise.all([
-            // Group by action type
-            UserAudit.aggregate([
-                {
-                    $group: {
-                        _id: '$action',
-                        count: { $sum: 1 }
-                    }
-                },
-                { $sort: { count: -1 } }
-            ]),
-            // Logins per day (last 30 days)
-            UserAudit.aggregate([
-                {
-                    $match: {
-                        action: 'LOGIN',
-                        timestamp: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
-                    }
-                },
-                {
-                    $group: {
-                        _id: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } },
-                        count: { $sum: 1 }
-                    }
-                },
-                { $sort: { _id: 1 } }
-            ]),
-            // Top users by activity
-            UserAudit.aggregate([
-                { $group: { _id: '$phone_number', count: { $sum: 1 } } },
-                { $sort: { count: -1 } },
-                { $limit: 10 }
-            ]),
-            UserAudit.countDocuments()
+        const [byAction, loginsByDay, topUsers] = await Promise.all([
+            UserAuditRepository.getStatsByAction(),
+            UserAuditRepository.getLoginsByDay(30),
+            UserAuditRepository.getTopUsers(10)
         ]);
 
         response.success(res, {
             byAction,
             loginsByDay,
-            topUsers,
-            totalLogs
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
- * Get audit logs for a specific user.
- */
-const getUserLogs = async (req, res, next) => {
-    try {
-        const { userId } = req.params;
-        const { page = 1, limit = 50 } = req.query;
-
-        const skip = (parseInt(page) - 1) * parseInt(limit);
-        const limitNum = Math.min(parseInt(limit), 100);
-
-        const [logs, total] = await Promise.all([
-            UserAudit.find({ userId })
-                .sort({ timestamp: -1 })
-                .skip(skip)
-                .limit(limitNum)
-                .lean(),
-            UserAudit.countDocuments({ userId })
-        ]);
-
-        response.success(res, {
-            logs,
-            pagination: {
-                page: parseInt(page),
-                limit: limitNum,
-                total,
-                pages: Math.ceil(total / limitNum)
-            }
+            topUsers
         });
     } catch (error) {
         next(error);
@@ -166,7 +79,6 @@ const getUserLogs = async (req, res, next) => {
 };
 
 module.exports = {
-    getLogs,
-    getStats,
-    getUserLogs
+    getUserAuditLogs,
+    getUserAuditStats
 };

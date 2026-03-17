@@ -24,8 +24,12 @@ services:
     container_name: vayureader_api
     restart: unless-stopped
     depends_on:
-      - mongo
-      - redis
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_started
     env_file:
       - .env
     networks:
@@ -63,18 +67,50 @@ services:
       - backend-network
 
   # ============================================================================
-  # MONGODB
+  # POSTGRESQL (General Data)
   # ============================================================================
-  mongo:
-    image: mongo:6-jammy
+  postgres:
+    image: postgres:16-alpine
     container_name: vayureader_db
     restart: unless-stopped
+    environment:
+      POSTGRES_DB: vayureader
+      POSTGRES_USER: vayureader
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vayureader}
     volumes:
-      - mongo-data:/data/db
+      - postgres-data:/var/lib/postgresql/data
+      - ./src/db/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql:ro
     networks:
       - backend-network
-    # In production, binding to localhost is handled by network isolation
-    # command: ["mongod", "--bind_ip_all"]
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U vayureader -d vayureader" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ============================================================================
+  # CLICKHOUSE (Log Analytics)
+  # ============================================================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: vayureader_logs
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: vayureader_logs
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    networks:
+      - backend-network
+    healthcheck:
+      test: [ "CMD-SHELL", "clickhouse-client --query 'SELECT 1'" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
     # ============================================================================
     # REDIS
@@ -116,5 +152,7 @@ networks:
     driver: bridge
 
 volumes:
-  mongo-data:
+  postgres-data:
+  clickhouse-data:
+  clickhouse-logs:
   es-data:

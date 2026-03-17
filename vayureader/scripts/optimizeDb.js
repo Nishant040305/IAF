@@ -1,117 +1,139 @@
 /**
  * Database Optimization Script
  * 
- * Run this script periodically (e.g., weekly) to optimize MongoDB performance.
+ * Run this script periodically (e.g., weekly) to optimize PostgreSQL performance.
  * 
  * Usage: node scripts/optimizeDb.js
  */
 
 require('dotenv').config();
 
-const mongoose = require('mongoose');
-
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/vayureader';
+const { connectPostgres, getPool, disconnectPostgres } = require('../src/db/postgres');
+const { database } = require('../src/config/environment');
 
 const optimizeDatabase = async () => {
     try {
-        console.log('🔧 Connecting to MongoDB...');
-        await mongoose.connect(MONGODB_URI);
-        console.log('✅ Connected to MongoDB');
+        console.log('🔧 Connecting to PostgreSQL...');
+        await connectPostgres(database.postgres);
+        console.log('✅ Connected to PostgreSQL');
 
-        const db = mongoose.connection.db;
-
-        // =====================================================================
-        // 1. Ensure indexes exist for all collections
-        // =====================================================================
-        console.log('\n📊 Checking and creating indexes...\n');
-
-        // Dictionary (Words) collection indexes
-        const wordsCollection = db.collection('words');
-        await wordsCollection.createIndex({ word: 1 }, { unique: true, background: true });
-        await wordsCollection.createIndex({ word: 'text' }, { background: true });
-        console.log('  ✅ Words indexes verified');
-
-        // Abbreviations collection indexes
-        const abbrCollection = db.collection('abbreviations');
-        await abbrCollection.createIndex({ abbreviation: 1 }, { unique: true, background: true });
-        await abbrCollection.createIndex(
-            { abbreviation: 'text', fullForm: 'text' },
-            { background: true }
-        );
-        console.log('  ✅ Abbreviations indexes verified');
-
-        // PDF Documents collection indexes
-        const pdfsCollection = db.collection('pdfdocuments');
-        await pdfsCollection.createIndex({ category: 1 }, { background: true });
-        await pdfsCollection.createIndex({ createdAt: -1 }, { background: true });
-        await pdfsCollection.createIndex({ title: 'text', content: 'text' }, { background: true });
-        await pdfsCollection.createIndex({ viewCount: -1 }, { background: true }); // For popular PDFs
-        console.log('  ✅ PDF Documents indexes verified');
+        const pool = getPool();
 
         // =====================================================================
-        // 2. Compact collections (reclaim disk space)
+        // 1. Run ANALYSE on all tables (updates planner statistics)
         // =====================================================================
-        console.log('\n🗜️  Running collection compaction...\n');
+        console.log('\n📊 Running ANALYZE on all tables...\n');
 
-        const collections = ['words', 'abbreviations', 'pdfdocuments'];
-        for (const collName of collections) {
+        const tables = ['users', 'admins', 'pdf_documents', 'words', 'abbreviations'];
+        for (const table of tables) {
             try {
-                await db.command({ compact: collName });
-                console.log(`  ✅ Compacted: ${collName}`);
+                await pool.query(`ANALYZE ${table}`);
+                console.log(`  ✅ Analyzed: ${table}`);
             } catch (error) {
-                // Compact may fail if collection doesn't exist
-                console.log(`  ⚠️  Could not compact ${collName}: ${error.message}`);
+                console.log(`  ⚠️  Could not analyze ${table}: ${error.message}`);
             }
         }
 
         // =====================================================================
-        // 3. Get collection statistics
+        // 2. Run VACUUM on all tables (reclaim disk space)
         // =====================================================================
-        console.log('\n📈 Collection Statistics:\n');
+        console.log('\n🗜️  Running VACUUM on tables...\n');
 
-        for (const collName of collections) {
+        for (const table of tables) {
             try {
-                const stats = await db.command({ collStats: collName });
-                console.log(`  ${collName}:`);
-                console.log(`    Documents: ${stats.count?.toLocaleString() || 0}`);
-                console.log(`    Size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
-                console.log(`    Indexes: ${stats.nindexes || 0}`);
-                console.log(`    Index Size: ${((stats.totalIndexSize || 0) / 1024 / 1024).toFixed(2)} MB`);
+                await pool.query(`VACUUM ANALYZE ${table}`);
+                console.log(`  ✅ Vacuumed: ${table}`);
+            } catch (error) {
+                console.log(`  ⚠️  Could not vacuum ${table}: ${error.message}`);
+            }
+        }
+
+        // =====================================================================
+        // 3. Get table statistics
+        // =====================================================================
+        console.log('\n📈 Table Statistics:\n');
+
+        for (const table of tables) {
+            try {
+                const countResult = await pool.query(`SELECT COUNT(*) AS count FROM ${table}`);
+                const sizeResult = await pool.query(
+                    `SELECT pg_size_pretty(pg_total_relation_size($1)) AS total_size,
+                            pg_size_pretty(pg_indexes_size($1)) AS index_size`,
+                    [table]
+                );
+                console.log(`  ${table}:`);
+                console.log(`    Documents: ${parseInt(countResult.rows[0].count).toLocaleString()}`);
+                console.log(`    Total Size: ${sizeResult.rows[0].total_size}`);
+                console.log(`    Index Size: ${sizeResult.rows[0].index_size}`);
                 console.log();
             } catch (error) {
-                console.log(`  ${collName}: Not found or error`);
+                console.log(`  ${table}: Not found or error (${error.message})`);
             }
         }
 
         // =====================================================================
-        // 4. Analyze index usage (for debugging slow queries)
+        // 4. Check index usage (for debugging slow queries)
         // =====================================================================
-        console.log('\n🔍 Index Usage Statistics (top indexes):\n');
+        console.log('\n🔍 Index Usage Statistics:\n');
 
-        for (const collName of collections) {
+        for (const table of tables) {
             try {
-                const indexStats = await db.collection(collName).aggregate([
-                    { $indexStats: {} }
-                ]).toArray();
+                const indexResult = await pool.query(`
+                    SELECT indexrelname AS index_name,
+                           idx_scan AS scans,
+                           idx_tup_read AS tuples_read,
+                           idx_tup_fetch AS tuples_fetched,
+                           pg_size_pretty(pg_relation_size(indexrelid)) AS size
+                    FROM pg_stat_user_indexes
+                    WHERE relname = $1
+                    ORDER BY idx_scan DESC
+                `, [table]);
 
-                console.log(`  ${collName}:`);
-                indexStats.forEach(idx => {
-                    console.log(`    - ${idx.name}: ${idx.accesses?.ops || 0} accesses`);
-                });
+                console.log(`  ${table}:`);
+                for (const idx of indexResult.rows) {
+                    console.log(`    - ${idx.index_name}: ${idx.scans} scans, ${idx.tuples_read} reads (${idx.size})`);
+                }
                 console.log();
             } catch (error) {
-                console.log(`  ${collName}: Could not get index stats`);
+                console.log(`  ${table}: Could not get index stats`);
             }
         }
 
-        console.log('✅ Database optimization complete!\n');
+        // =====================================================================
+        // 5. Check for unused indexes
+        // =====================================================================
+        console.log('\n⚠️  Unused Indexes (0 scans since last stats reset):\n');
+
+        try {
+            const unusedResult = await pool.query(`
+                SELECT relname AS table_name,
+                       indexrelname AS index_name,
+                       pg_size_pretty(pg_relation_size(indexrelid)) AS size
+                FROM pg_stat_user_indexes
+                WHERE idx_scan = 0
+                AND relname = ANY($1)
+                ORDER BY pg_relation_size(indexrelid) DESC
+            `, [tables]);
+
+            if (unusedResult.rows.length === 0) {
+                console.log('  ✅ No unused indexes found');
+            } else {
+                for (const idx of unusedResult.rows) {
+                    console.log(`  - ${idx.table_name}.${idx.index_name} (${idx.size})`);
+                }
+            }
+        } catch (error) {
+            console.log('  Could not check unused indexes');
+        }
+
+        console.log('\n✅ Database optimization complete!\n');
 
     } catch (error) {
         console.error('❌ Database optimization failed:', error.message);
         process.exit(1);
     } finally {
-        await mongoose.disconnect();
-        console.log('🔌 Disconnected from MongoDB');
+        await disconnectPostgres();
+        console.log('🔌 Disconnected from PostgreSQL');
     }
 };
 

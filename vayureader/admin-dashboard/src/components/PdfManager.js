@@ -180,12 +180,15 @@ export default function PdfManager(props) {
       return;
     }
 
+    const SECURITY_BYPASS = (window.__ENV__?.REACT_APP_SECURITY_BYPASS || process.env.REACT_APP_SECURITY_BYPASS || '') === 'true';
+
     try {
       const token = getAdminToken();
       const rawUrl = `${api.defaults.baseURL}${pdfPath}`;
       let targetUrl = rawUrl;
 
-      if (token) {
+      // Skip DPoP when security bypass is active
+      if (!SECURITY_BYPASS && token) {
         const dpopProof = await createDpopProof({
           method: 'GET',
           requestUri: rawUrl,
@@ -271,6 +274,9 @@ export default function PdfManager(props) {
   };
 
   const attachMultipartE2EEMeta = async (formData, fileToHash = null) => {
+    const SECURITY_BYPASS = (window.__ENV__?.REACT_APP_SECURITY_BYPASS || process.env.REACT_APP_SECURITY_BYPASS || '') === 'true';
+    if (SECURITY_BYPASS) return; // Skip E2EE signature when security bypass is active
+
     const token = getAdminToken();
     if (!token) return;
 

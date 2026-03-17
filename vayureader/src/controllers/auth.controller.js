@@ -6,7 +6,7 @@
  * @module controllers/auth.controller
  */
 
-const User = require('../models/User');
+const { UserRepository } = require('../repositories');
 const { generateLifetimeUserToken } = require('../services/jwt.service');
 const { generateOtp, generateLoginToken, saveOtp, verifyOtp, shouldSkipSend } = require('../services/otp.service');
 const { createSession, revokeAllSessions, SESSION_TYPES } = require('../services/session.service');
@@ -40,16 +40,16 @@ const requestLoginOtp = async (req, res, next) => {
         const sanitizedDeviceId = deviceId.trim();
 
         // Find or create user (DO NOT update deviceId yet - wait for OTP verification)
-        let user = await User.findOne({ phone_number: phoneNumber });
+        let user = await UserRepository.findByPhone(phoneNumber);
         let isNewUser = false;
 
         if (!user) {
             // New user - create but don't save deviceId yet (will be set after OTP verification)
             // Name is ONLY set during initial registration
-            user = new User({ name, phone_number: phoneNumber });
+            user = await UserRepository.create({ name, phone_number: phoneNumber });
             isNewUser = true;
         } else {
-            if (user.isBlocked) {
+            if (user.isBlocked || user.is_blocked) {
                 return response.unauthorized(res, 'Your account has been blocked. Please contact support.');
             }
 
@@ -59,6 +59,7 @@ const requestLoginOtp = async (req, res, next) => {
                 // Log the name change for audit (allowed: true)
                 logNameChange(user, sanitizedDeviceId, user.name, name, true);
                 // Update the name
+                await UserRepository.updateById(user._id, { name });
                 user.name = name;
             }
 
@@ -72,11 +73,6 @@ const requestLoginOtp = async (req, res, next) => {
         // Generate OTP and save to Redis (encrypted with loginToken, deviceId stored for verification)
         const otp = generateOtp();
         await saveOtp(phoneNumber, otp, loginToken, sanitizedDeviceId);
-
-        // Save user (for new user creation or name updates)
-        if (isNewUser || user.isModified('name')) {
-            await user.save();
-        }
 
         // Send OTP via SMS (Asynchronously)
         sendOtpSms(phoneNumber, otp).catch(err => {
@@ -133,13 +129,13 @@ const verifyLoginOtp = async (req, res, next) => {
         const sanitizedDeviceId = deviceId.trim();
 
         // Find user
-        const user = await User.findOne({ phone_number: phoneNumber });
+        const user = await UserRepository.findByPhone(phoneNumber);
 
         if (!user) {
             return response.badRequest(res, 'User not found. Please request OTP first.');
         }
 
-        if (user.isBlocked) {
+        if (user.isBlocked || user.is_blocked) {
             return response.unauthorized(res, 'Your account has been blocked. Please contact support.');
         }
 
@@ -150,30 +146,30 @@ const verifyLoginOtp = async (req, res, next) => {
             return response.badRequest(res, verification.error);
         }
 
-        // Clear OTP from Redis - Handled in verifyOtp service
-        // await deleteOtp(phoneNumber);
-
         // Handle device binding and change detection
-        const isNewUser = !user.deviceId;
-        const isDeviceChange = user.deviceId && user.deviceId !== sanitizedDeviceId;
+        const userDeviceId = user.deviceId || user.device_id;
+        const isNewUserDevice = !userDeviceId;
+        const isDeviceChange = userDeviceId && userDeviceId !== sanitizedDeviceId;
 
         if (isDeviceChange) {
             // Log device change with both old and new device IDs
-            logDeviceChange(user, user.deviceId, sanitizedDeviceId);
-
-            // Store the previous device ID for audit trail
-            user.previousDeviceId = user.deviceId;
+            logDeviceChange(user, userDeviceId, sanitizedDeviceId);
         }
 
         // Update user's device ID and last login
-        user.deviceId = sanitizedDeviceId;
-        user.lastLogin = new Date();
-        await user.save();
+        const updateData = {
+            deviceId: sanitizedDeviceId,
+            lastLogin: new Date()
+        };
+        if (isDeviceChange) {
+            updateData.previousDeviceId = userDeviceId;
+        }
+        await UserRepository.updateById(user._id, updateData);
 
         // Log login event
         logLogin(user, sanitizedDeviceId);
 
-        const tokenVersion = user.tokenVersion || 0;
+        const tokenVersion = user.tokenVersion || user.token_version || 0;
         const { sid } = await createSession({
             type: SESSION_TYPES.USER,
             accountId: user._id,
@@ -204,9 +200,9 @@ const verifyLoginOtp = async (req, res, next) => {
         });
 
         response.success(res, {
-            user: user.toSafeObject(),
+            user: UserRepository.toSafeObject(user),
             token,
-            isNewDevice: isNewUser,
+            isNewDevice: isNewUserDevice,
             deviceChanged: isDeviceChange
         }, isDeviceChange ? 'Login successful (device changed)' : 'Login successful');
     } catch (error) {
@@ -226,10 +222,7 @@ const logout = async (req, res, next) => {
             return response.unauthorized(res, 'No token provided');
         }
 
-        const user = await User.findByIdAndUpdate(
-            userId,
-            { $inc: { tokenVersion: 1 } }
-        );
+        const user = await UserRepository.incrementTokenVersion(userId);
 
         if (!user) {
             return response.unauthorized(res, 'User no longer exists');
@@ -268,13 +261,13 @@ const logout = async (req, res, next) => {
  */
 const getProfile = async (req, res, next) => {
     try {
-        const user = await User.findById(req.user.userId);
+        const user = await UserRepository.findById(req.user.userId);
 
         if (!user) {
             return response.notFound(res, 'User not found');
         }
 
-        response.success(res, { user: user.toSafeObject() });
+        response.success(res, { user: UserRepository.toSafeObject(user) });
     } catch (error) {
         next(error);
     }

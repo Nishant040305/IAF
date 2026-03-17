@@ -33,20 +33,27 @@ export function usePdfEvents({ onPdfAdded, onPdfUpdated, onPdfDeleted, enabled =
             eventSourceRef.current.close();
         }
 
+        const SECURITY_BYPASS = (window.__ENV__?.REACT_APP_SECURITY_BYPASS || process.env.REACT_APP_SECURITY_BYPASS || '') === 'true';
+
         try {
             // Create SSE connection - browser will send cookies automatically
             // Note: EventSource doesn't support withCredentials in all browsers,
             // so we use fetch with ReadableStream for cross-origin with credentials
             const rawSseUrl = `${baseUrl}/api/events`;
             const token = getAdminToken();
-            const dpopProof = token
-                ? await createDpopProof({
+            let sseUrl = rawSseUrl;
+
+            // Skip DPoP when security bypass is active
+            if (!SECURITY_BYPASS && token) {
+                const dpopProof = await createDpopProof({
                     method: 'GET',
                     requestUri: rawSseUrl,
                     accessToken: token
-                })
-                : null;
-            const sseUrl = dpopProof ? appendDpopQueryParam(rawSseUrl, dpopProof) : rawSseUrl;
+                });
+                if (dpopProof) {
+                    sseUrl = appendDpopQueryParam(rawSseUrl, dpopProof);
+                }
+            }
 
             // Use native EventSource for same-origin, or polyfill pattern for CORS
             const eventSource = new EventSource(sseUrl, { withCredentials: true });

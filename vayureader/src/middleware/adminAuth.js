@@ -8,22 +8,10 @@
 
 const { verifyToken } = require('../services/jwt.service');
 const response = require('../utils/response');
-const User = require('../models/User');
+const { AdminRepository, UserRepository } = require('../repositories');
 const { redisClient } = require('../config/redis');
 const { validateSession, SESSION_TYPES } = require('../services/session.service');
 const { verifyDpopProof } = require('../services/dpop.service');
-
-/**
- * Authenticates an admin via JWT token.
- * Reads token from:
- * 1. HTTP-only cookie (admin_token)
- * 2. Authorization header (Bearer token) - fallback
- * 
- * @param {Object} req - Express request
- * @param {Object} res - Express response
- * @param {Function} next - Next middleware
- */
-const Admin = require('../models/Admin');
 
 /**
  * Authenticates an admin via JWT token.
@@ -80,25 +68,24 @@ const authenticateAdmin = async (req, res, next) => {
         }
 
         // Database verification: ensure admin exists and token session is still valid.
-        const admin = await Admin.findById(decoded.adminId)
-            .select('name contact permissions tokenVersion isVerified');
+        const admin = await AdminRepository.findById(decoded.adminId, {
+            select: ['name', 'contact', 'permissions', 'tokenVersion', 'isVerified']
+        });
         if (!admin) {
             return response.unauthorized(res, 'Admin account no longer exists');
         }
 
-        const currentTokenVersion = admin.tokenVersion || 0;
+        const currentTokenVersion = admin.tokenVersion || admin.token_version || 0;
         if (decodedTokenVersion !== currentTokenVersion) {
             return response.unauthorized(res, 'Session expired. Please login again.');
         }
 
         // Enforce security questions setup
         const isSetupPath = req.path === '/security-setup' || req.originalUrl.includes('/recovery/setup') || req.path === '/setup';
-        if (!admin.isVerified && !isSetupPath) {
+        const isVerified = admin.isVerified !== undefined ? admin.isVerified : admin.is_verified;
+        if (!isVerified && !isSetupPath) {
             return response.forbidden(res, 'Security setup required for sub-admins.');
         }
-
-        // Optional: Check if admin is disabled/suspended (if such a field exists)
-        // if (admin.status === 'suspended') return response.unauthorized(res, 'Account suspended');
 
         // Attach fresh admin info to request
         req.admin = {
@@ -116,7 +103,6 @@ const authenticateAdmin = async (req, res, next) => {
         if (error.name === 'TokenExpiredError') {
             return response.unauthorized(res, 'Token expired');
         }
-        // Handle database errors distinct from token errors if needed, but safe to genericize
         console.error('Admin Auth Error:', error.message);
         return response.unauthorized(res, 'Invalid token or authentication failed');
     }
@@ -204,10 +190,9 @@ const unifiedAuth = async (req, res, next) => {
             if (cachedAdmin) {
                 admin = JSON.parse(cachedAdmin);
             } else {
-                // Fix Zombie Admin: Validate admin exists iyn DB even for unifiedAuth
-                admin = await Admin.findById(decoded.adminId)
-                    .select('name contact permissions tokenVersion isVerified')
-                    .lean();
+                admin = await AdminRepository.findById(decoded.adminId, {
+                    select: ['name', 'contact', 'permissions', 'tokenVersion', 'isVerified']
+                });
                 if (admin) {
                     await redisClient.set(cacheKey, JSON.stringify(admin), { EX: 60 }); // Cache for 60s
                 }
@@ -217,14 +202,15 @@ const unifiedAuth = async (req, res, next) => {
                 return response.unauthorized(res, 'Admin account no longer exists');
             }
 
-            const currentTokenVersion = admin.tokenVersion || 0;
+            const currentTokenVersion = admin.tokenVersion || admin.token_version || 0;
             if (decodedTokenVersion !== currentTokenVersion) {
                 return response.unauthorized(res, 'Session expired. Please login again.');
             }
 
             // Enforce security questions setup
             const isSetupPath = req.path === '/security-setup' || req.originalUrl.includes('/recovery/setup') || req.path === '/setup';
-            if (!admin.isVerified && !isSetupPath) {
+            const isVerified = admin.isVerified !== undefined ? admin.isVerified : admin.is_verified;
+            if (!isVerified && !isSetupPath) {
                 return response.forbidden(res, 'Security setup required.');
             }
 
@@ -266,8 +252,9 @@ const unifiedAuth = async (req, res, next) => {
             if (cachedUser) {
                 user = JSON.parse(cachedUser);
             } else {
-                // Validate user still exists and is not blocked
-                user = await User.findById(decoded.userId).select('isBlocked tokenVersion isVerified').lean();
+                user = await UserRepository.findById(decoded.userId, {
+                    select: ['isBlocked', 'tokenVersion', 'isVerified']
+                });
                 if (user) {
                     await redisClient.set(cacheKey, JSON.stringify(user), { EX: 60 }); // Cache for 60s
                 }
@@ -276,18 +263,20 @@ const unifiedAuth = async (req, res, next) => {
             if (!user) {
                 return response.unauthorized(res, 'User no longer exists');
             }
-            if (user.isBlocked) {
+            const isBlocked = user.isBlocked !== undefined ? user.isBlocked : user.is_blocked;
+            if (isBlocked) {
                 return response.unauthorized(res, 'User is blocked');
             }
 
-            const currentTokenVersion = user.tokenVersion || 0;
+            const currentTokenVersion = user.tokenVersion || user.token_version || 0;
             if (decodedTokenVersion !== currentTokenVersion) {
                 return response.unauthorized(res, 'Session expired. Please login again.');
             }
 
             // Enforce security questions setup
             const isSetupPathUser = req.path === '/security-setup' || req.originalUrl.includes('/recovery/setup') || req.path === '/setup';
-            if (!user.isVerified && !isSetupPathUser) {
+            const isVerified = user.isVerified !== undefined ? user.isVerified : user.is_verified;
+            if (!isVerified && !isSetupPathUser) {
                 return response.forbidden(res, 'Security setup required.');
             }
 

@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const { createReadStream } = require('fs');
-const PdfDocument = require('../models/PdfDocument');
+const { PdfDocumentRepository } = require('../repositories');
 const { logCreate, logUpdate, logDelete, logRead, RESOURCE_TYPES } = require('../services/audit.service');
 const { publishPdfEvent, PDF_EVENTS } = require('../services/pubsub.service');
 const { logPdfRead } = require('../services/userAudit.service');
@@ -39,28 +39,8 @@ const searchPdfs = async (req, res, next) => {
         const { search } = req.query;
         const page = Math.max(1, parseInt(req.query.page) || 1);
         const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
-        const skip = (page - 1) * limit;
 
-        let query = {};
-        if (search) {
-            const safeSearch = escapeRegex(search);
-            query = {
-                $or: [
-                    { title: { $regex: safeSearch, $options: 'i' } },
-                    { content: { $regex: safeSearch, $options: 'i' } },
-                    { category: { $regex: safeSearch, $options: 'i' } }
-                ]
-            };
-        }
-
-        const [documents, total] = await Promise.all([
-            PdfDocument.find(query)
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(),
-            PdfDocument.countDocuments(query)
-        ]);
+        const { documents, total } = await PdfDocumentRepository.searchWithPagination(search, page, limit);
 
         response.success(res, {
             documents,
@@ -89,12 +69,12 @@ const getAllPdfs = async (req, res, next) => {
         }
 
         const [documents, total] = await Promise.all([
-            PdfDocument.find(query)
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(),
-            PdfDocument.countDocuments(query)
+            PdfDocumentRepository.find(query, {
+                sort: { createdAt: -1 },
+                skip,
+                limit
+            }),
+            PdfDocumentRepository.count(query)
         ]);
 
         response.success(res, {
@@ -125,7 +105,7 @@ const getCategories = async (req, res, next) => {
             return response.success(res, JSON.parse(cachedData));
         }
 
-        const categories = await PdfDocument.distinct('category');
+        const categories = await PdfDocumentRepository.distinct('category');
         const result = categories.filter(c => c).sort();
 
         // Cache for 1 hour
@@ -146,14 +126,10 @@ const getPdfById = async (req, res, next) => {
 
         // If admin, just fetch without incrementing view count
         if (req.admin) {
-            pdf = await PdfDocument.findById(req.params.id);
+            pdf = await PdfDocumentRepository.findById(req.params.id);
         } else {
             // If user (or public), increment view count
-            pdf = await PdfDocument.findByIdAndUpdate(
-                req.params.id,
-                { $inc: { viewCount: 1 } },
-                { new: true }
-            );
+            pdf = await PdfDocumentRepository.incrementViewCount(req.params.id);
         }
 
         if (!pdf) {
@@ -165,7 +141,7 @@ const getPdfById = async (req, res, next) => {
             logPdfRead(
                 { userId: req.user.userId, phone_number: req.user.phone_number },
                 req.user.deviceId,
-                { pdfId: pdf._id.toString(), title: pdf.title }
+                { pdfId: (pdf._id || pdf.id).toString(), title: pdf.title }
             );
         }
 
@@ -182,7 +158,7 @@ const getPdfById = async (req, res, next) => {
  */
 const getAdminPdfById = async (req, res, next) => {
     try {
-        const pdf = await PdfDocument.findById(req.params.id);
+        const pdf = await PdfDocumentRepository.findById(req.params.id);
 
         if (!pdf) {
             return response.notFound(res, 'PDF not found');
@@ -293,7 +269,7 @@ const uploadPdf = async (req, res, next) => {
             return response.badRequest(res, `PDF rejected: Unable to render page 1. The file may be corrupted or invalid. (${thumbError.message})`);
         }
 
-        const newDoc = new PdfDocument({
+        const newDoc = await PdfDocumentRepository.create({
             title,
             content,
             pdfUrl,
@@ -302,8 +278,6 @@ const uploadPdf = async (req, res, next) => {
             viewCount: 0
         });
 
-        await newDoc.save();
-
         await logCreate(RESOURCE_TYPES.PDF, newDoc._id, req.admin, {
             title: newDoc.title,
             category: newDoc.category
@@ -311,7 +285,7 @@ const uploadPdf = async (req, res, next) => {
 
         // Publish real-time event with only ID (user fetches details via authenticated endpoint)
         await publishPdfEvent(PDF_EVENTS.ADDED, {
-            id: newDoc._id.toString()
+            id: (newDoc._id || newDoc.id).toString()
         });
 
         // Invalidate categories cache
@@ -337,7 +311,7 @@ const updatePdf = async (req, res, next) => {
         if (category == undefined || category === "") {
             return response.badRequest(res, 'Category is required');
         }
-        const oldDoc = await PdfDocument.findById(req.params.id);
+        const oldDoc = await PdfDocumentRepository.findById(req.params.id);
         if (!oldDoc) {
             return response.notFound(res, 'PDF not found');
         }
@@ -428,15 +402,13 @@ const updatePdf = async (req, res, next) => {
             }
         }
 
-        const updated = await PdfDocument.findByIdAndUpdate(
-            req.params.id,
-            updateData,
-            { new: true, runValidators: true }
-        );
+        const updated = await PdfDocumentRepository.updateById(req.params.id, updateData);
 
         // Clean up old files that were replaced
-        if (pdfFile && oldDoc.pdfUrl) {
-            const oldPdfPath = path.join(__dirname, '..', '..', oldDoc.pdfUrl);
+        const oldPdfUrl = oldDoc.pdfUrl || oldDoc.pdf_url;
+        const oldThumbnail = oldDoc.thumbnail;
+        if (pdfFile && oldPdfUrl) {
+            const oldPdfPath = path.join(__dirname, '..', '..', oldPdfUrl);
             fs.unlink(oldPdfPath)
                 .then(async () => {
                     try {
@@ -447,9 +419,9 @@ const updatePdf = async (req, res, next) => {
                 })
                 .catch(() => { });
         }
-        if (pdfFile && oldDoc.thumbnail) {
+        if (pdfFile && oldThumbnail) {
             // If we uploaded a new PDF, the old thumbnail is stale
-            const oldThumbPath = path.join(__dirname, '..', '..', oldDoc.thumbnail);
+            const oldThumbPath = path.join(__dirname, '..', '..', oldThumbnail);
             fs.unlink(oldThumbPath)
                 .then(async () => {
                     try {
@@ -468,7 +440,7 @@ const updatePdf = async (req, res, next) => {
 
         // Publish real-time event with only ID (user fetches details via authenticated endpoint)
         await publishPdfEvent(PDF_EVENTS.UPDATED, {
-            id: updated._id.toString()
+            id: (updated._id || updated.id).toString()
         });
 
         // Invalidate categories cache
@@ -485,7 +457,7 @@ const updatePdf = async (req, res, next) => {
  */
 const deletePdf = async (req, res, next) => {
     try {
-        const pdf = await PdfDocument.findById(req.params.id);
+        const pdf = await PdfDocumentRepository.findById(req.params.id);
 
         if (!pdf) {
             return response.notFound(res, 'PDF not found');
@@ -515,8 +487,9 @@ const deletePdf = async (req, res, next) => {
 
         // Delete files in parallel
         const deleteTasks = [];
-        if (pdf.pdfUrl) {
-            const pdfPath = path.join(__dirname, '..', '..', pdf.pdfUrl);
+        const pdfUrl = pdf.pdfUrl || pdf.pdf_url;
+        if (pdfUrl) {
+            const pdfPath = path.join(__dirname, '..', '..', pdfUrl);
             deleteTasks.push(deleteFile(pdfPath).then(() => deleteEmptyFolder(path.dirname(pdfPath))));
         }
         if (pdf.thumbnail) {
@@ -529,7 +502,7 @@ const deletePdf = async (req, res, next) => {
             console.error('Background file deletion error:', err.message);
         });
 
-        await PdfDocument.findByIdAndDelete(req.params.id);
+        await PdfDocumentRepository.deleteById(req.params.id);
 
         await logDelete(RESOURCE_TYPES.PDF, req.params.id, req.admin, {
             title: pdf.title
@@ -580,12 +553,7 @@ const serveFile = async (req, res, next) => {
             meta = JSON.parse(cachedData);
         } else {
             // Validate that this file belongs to a real PDF document
-            const pdf = await PdfDocument.findOne({
-                $or: [
-                    { pdfUrl: requestedPath },
-                    { thumbnail: requestedPath }
-                ]
-            }).lean();
+            const pdf = await PdfDocumentRepository.findByFileUrl(requestedPath);
 
             if (!pdf) {
                 return response.notFound(res, 'File not found');

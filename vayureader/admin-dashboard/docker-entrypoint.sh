@@ -12,6 +12,7 @@ cat <<EOF > /usr/share/nginx/html/env-config.js
 window.__ENV__ = {
   REACT_APP_API_BASE_URL: "${REACT_APP_API_BASE_URL:-}",
   HTTPS: "${HTTPS:-true}",
+  REACT_APP_SECURITY_BYPASS: "${REACT_APP_SECURITY_BYPASS:-}",
 };
 EOF
 

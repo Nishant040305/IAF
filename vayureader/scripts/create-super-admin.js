@@ -6,12 +6,13 @@
  * Creates initial super admin with password for 2FA authentication.
  */
 
-const mongoose = require('mongoose');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-const Admin = require('../src/models/Admin');
+const { connectPostgres, disconnectPostgres } = require('../src/db/postgres');
+const { AdminRepository } = require('../src/repositories');
 const { hashPassword } = require('../src/services/password.service');
+const { database } = require('../src/config/environment');
 
 const args = process.argv.slice(2);
 
@@ -37,28 +38,28 @@ const createSuperAdmin = async () => {
 
     try {
         console.log('Connecting to database...');
-        await mongoose.connect(process.env.MONGODB_URI);
+        await connectPostgres(database.postgres);
         console.log('Connected.');
 
         // Hash password
         const passwordHash = await hashPassword(password);
 
-        const existing = await Admin.findOne({ contact });
+        const existing = await AdminRepository.findByContact(contact);
         if (existing) {
             console.log(`Admin with contact ${contact} already exists. Updating...`);
-            existing.permissions = Admin.PERMISSIONS;
-            existing.passwordHash = passwordHash;
-            await existing.save();
+            await AdminRepository.updateById(existing._id, {
+                permissions: AdminRepository.PERMISSIONS,
+                passwordHash
+            });
             console.log('Updated to Admin with all permissions and new password.');
         } else {
-            const newAdmin = new Admin({
+            const newAdmin = await AdminRepository.create({
                 name,
                 contact,
-                permissions: Admin.PERMISSIONS,
+                permissions: AdminRepository.PERMISSIONS,
                 passwordHash
             });
 
-            await newAdmin.save();
             console.log('\n✅ Admin created successfully!');
             console.log(`   Name: ${name}`);
             console.log(`   Contact: ${contact}`);

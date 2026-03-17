@@ -10,9 +10,9 @@
  */
 
 require('dotenv').config();
-const mongoose = require('mongoose');
-const UserAudit = require('../src/models/UserAudit');
-const AuditLog = require('../src/models/AuditLog');
+const { connectClickHouse, disconnectClickHouse, getClickHouseClient } = require('../src/db/clickhouse');
+const { AuditLogRepository, UserAuditRepository } = require('../src/repositories');
+const { database } = require('../src/config/environment');
 
 const args = process.argv.slice(2);
 
@@ -35,9 +35,9 @@ if (isNaN(days) || days < 1) {
 
 const cleanup = async () => {
     try {
-        console.log('Connecting to MongoDB...');
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log('Connected to MongoDB');
+        console.log('Connecting to ClickHouse...');
+        await connectClickHouse(database.clickhouse);
+        console.log('Connected to ClickHouse');
 
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - days);
@@ -49,8 +49,12 @@ const cleanup = async () => {
         console.log('-'.repeat(40));
 
         // Count logs to be deleted
-        const userAuditCount = await UserAudit.countDocuments({ timestamp: { $lt: cutoffDate } });
-        const auditLogCount = await AuditLog.countDocuments({ timestamp: { $lt: cutoffDate } });
+        const userAuditCount = await UserAuditRepository.count({
+            timestamp: { $lt: cutoffDate }
+        });
+        const auditLogCount = await AuditLogRepository.count({
+            timestamp: { $lt: cutoffDate }
+        });
 
         console.log(`\nFound logs older than ${days} days:`);
         console.log(`- UserAudit: ${userAuditCount} records`);
@@ -61,16 +65,16 @@ const cleanup = async () => {
         } else {
             if (userAuditCount > 0) {
                 console.log('\nDeleting old UserAudit logs...');
-                const result = await UserAudit.deleteMany({ timestamp: { $lt: cutoffDate } });
-                console.log(`✓ Deleted ${result.deletedCount} UserAudit records`);
+                await UserAuditRepository.deleteOlderThan(cutoffDate);
+                console.log(`✓ Deleted UserAudit records older than ${cutoffDate.toISOString()}`);
             } else {
                 console.log('\nNo old UserAudit logs to delete.');
             }
 
             if (auditLogCount > 0) {
                 console.log('\nDeleting old AuditLog logs...');
-                const result = await AuditLog.deleteMany({ timestamp: { $lt: cutoffDate } });
-                console.log(`✓ Deleted ${result.deletedCount} AuditLog records`);
+                await AuditLogRepository.deleteOlderThan(cutoffDate);
+                console.log(`✓ Deleted AuditLog records older than ${cutoffDate.toISOString()}`);
             } else {
                 console.log('\nNo old AuditLog logs to delete.');
             }
@@ -82,10 +86,8 @@ const cleanup = async () => {
         console.error('\n❌ Error during cleanup:', error.message);
         process.exit(1);
     } finally {
-        if (mongoose.connection.readyState === 1) {
-            await mongoose.disconnect();
-            console.log('Disconnected from MongoDB');
-        }
+        await disconnectClickHouse();
+        console.log('Disconnected from ClickHouse');
         process.exit(0);
     }
 };

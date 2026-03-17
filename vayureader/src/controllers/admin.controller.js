@@ -6,7 +6,7 @@
  * @module controllers/admin.controller
  */
 
-const Admin = require('../models/Admin');
+const { AdminRepository, UserRepository } = require('../repositories');
 const { generateAdminToken } = require('../services/jwt.service');
 const { generateOtp, generateLoginToken, saveOtp, verifyOtp, shouldSkipSend } = require('../services/otp.service');
 const { createSession, revokeAllSessions, SESSION_TYPES } = require('../services/session.service');
@@ -42,12 +42,12 @@ const requestLoginOtp = async (req, res, next) => {
         }
 
         // Find admin by contact
-        const admin = await Admin.findOne({ contact });
+        const admin = await AdminRepository.findByContact(contact);
 
         // Verify password (Factor 1: Something you know)
         // If admin is not found, verify against dummy hash to mitigate timing attacks (User Enumeration)
         const DUMMY_HASH = '$2b$12$LhOq917wD.JbJzT2eKkPmeQ7p0Q8kZ4uS/XN2Gg0Q9g/7sR1iBvjW';
-        const isPasswordValid = await comparePassword(password, admin ? admin.passwordHash : DUMMY_HASH);
+        const isPasswordValid = await comparePassword(password, admin ? admin.passwordHash || admin.password_hash : DUMMY_HASH);
 
         if (!admin || !isPasswordValid) {
             return response.unauthorized(res, 'Invalid credentials');
@@ -107,7 +107,7 @@ const verifyLoginOtp = async (req, res, next) => {
             dpopJkt = dpopKeyCheck.jkt;
         }
 
-        const admin = await Admin.findOne({ contact });
+        const admin = await AdminRepository.findByContact(contact);
 
         if (!admin) {
             return response.unauthorized(res, 'Invalid credentials');
@@ -120,10 +120,7 @@ const verifyLoginOtp = async (req, res, next) => {
             return response.badRequest(res, verification.error);
         }
 
-        // Clear OTP from Redis - Handled in verifyOtp service
-        // await deleteOtp(contact);
-
-        const tokenVersion = admin.tokenVersion || 0;
+        const tokenVersion = admin.tokenVersion || admin.token_version || 0;
         const { sid } = await createSession({
             type: SESSION_TYPES.ADMIN,
             accountId: admin._id,
@@ -150,7 +147,7 @@ const verifyLoginOtp = async (req, res, next) => {
         });
 
         response.success(res, {
-            admin: admin.toSafeObject(),
+            admin: AdminRepository.toSafeObject(admin),
             token
         }, 'Login successful');
     } catch (error) {
@@ -167,10 +164,10 @@ const verifyLoginOtp = async (req, res, next) => {
  */
 const getAllSubAdmins = async (req, res, next) => {
     try {
-        const admins = await Admin.find({})
-            .sort({ createdAt: -1 })
-            .select('name contact permissions isVerified createdBy createdAt updatedAt')
-            .lean();
+        const admins = await AdminRepository.find({}, {
+            sort: { createdAt: -1 },
+            select: ['name', 'contact', 'permissions', 'isVerified', 'createdBy', 'createdAt', 'updatedAt']
+        });
 
         response.success(res, admins);
     } catch (error) {
@@ -196,14 +193,14 @@ const createSubAdmin = async (req, res, next) => {
         }
 
         // Check for existing admin
-        const existing = await Admin.findOne({ contact: normalizedContact });
+        const existing = await AdminRepository.findByContact(normalizedContact);
         if (existing) {
             return response.conflict(res, 'Admin with this contact already exists');
         }
 
         // Validate permissions
         const validPermissions = permissions && Array.isArray(permissions)
-            ? permissions.filter(p => Admin.PERMISSIONS.includes(p))
+            ? permissions.filter(p => AdminRepository.PERMISSIONS.includes(p))
             : [];
 
         // RBAC Security Check: Prevent privilege escalation
@@ -216,15 +213,13 @@ const createSubAdmin = async (req, res, next) => {
         // Hash password
         const passwordHash = await hashPassword(password);
 
-        const newAdmin = new Admin({
+        const newAdmin = await AdminRepository.create({
             name: sanitizeName(name),
             contact: normalizedContact,
             permissions: validPermissions,
             createdBy: req.admin.name,
             passwordHash
         });
-
-        await newAdmin.save();
 
         await logAction(
             ACTION_TYPES.CREATE,
@@ -234,7 +229,7 @@ const createSubAdmin = async (req, res, next) => {
             { name: newAdmin.name }
         );
 
-        response.created(res, newAdmin.toSafeObject(), 'Sub-admin created successfully');
+        response.created(res, AdminRepository.toSafeObject(newAdmin), 'Sub-admin created successfully');
     } catch (error) {
         next(error);
     }
@@ -246,7 +241,7 @@ const createSubAdmin = async (req, res, next) => {
 const updateSubAdmin = async (req, res, next) => {
     try {
         const { permissions } = req.body;
-        const admin = await Admin.findById(req.params.id);
+        const admin = await AdminRepository.findById(req.params.id);
 
         if (!admin) {
             return response.notFound(res, 'Sub-admin not found');
@@ -256,7 +251,7 @@ const updateSubAdmin = async (req, res, next) => {
 
         // Validate permissions
         const validPermissions = permissions && Array.isArray(permissions)
-            ? permissions.filter(p => Admin.PERMISSIONS.includes(p))
+            ? permissions.filter(p => AdminRepository.PERMISSIONS.includes(p))
             : [];
 
         // RBAC Security Check: Prevent privilege escalation (cannot grant permissions you don't possess)
@@ -273,8 +268,7 @@ const updateSubAdmin = async (req, res, next) => {
             return response.forbidden(res, 'You cannot modify an admin who possesses permissions greater than your own');
         }
 
-        admin.permissions = validPermissions;
-        await admin.save();
+        const updated = await AdminRepository.updateById(admin._id, { permissions: validPermissions });
 
         await logAction(
             ACTION_TYPES.UPDATE,
@@ -288,7 +282,7 @@ const updateSubAdmin = async (req, res, next) => {
             }
         );
 
-        response.success(res, admin.toSafeObject(), 'Sub-admin updated successfully');
+        response.success(res, AdminRepository.toSafeObject(updated), 'Sub-admin updated successfully');
     } catch (error) {
         next(error);
     }
@@ -299,7 +293,7 @@ const updateSubAdmin = async (req, res, next) => {
  */
 const deleteSubAdmin = async (req, res, next) => {
     try {
-        const admin = await Admin.findById(req.params.id);
+        const admin = await AdminRepository.findById(req.params.id);
 
         if (!admin) {
             return response.notFound(res, 'Sub-admin not found');
@@ -316,7 +310,7 @@ const deleteSubAdmin = async (req, res, next) => {
             return response.forbidden(res, 'You cannot delete an admin who possesses permissions greater than your own');
         }
 
-        await Admin.findByIdAndDelete(req.params.id);
+        await AdminRepository.deleteById(req.params.id);
 
         await logAction(
             ACTION_TYPES.DELETE,
@@ -337,13 +331,13 @@ const deleteSubAdmin = async (req, res, next) => {
  */
 const getSubAdminById = async (req, res, next) => {
     try {
-        const admin = await Admin.findById(req.params.id);
+        const admin = await AdminRepository.findById(req.params.id);
 
         if (!admin) {
             return response.notFound(res, 'Sub-admin not found');
         }
 
-        response.success(res, admin.toSafeObject());
+        response.success(res, AdminRepository.toSafeObject(admin));
     } catch (error) {
         next(error);
     }
@@ -359,7 +353,6 @@ const getSubAdminById = async (req, res, next) => {
  */
 const createUser = async (req, res, next) => {
     try {
-        const User = require('../models/User');
         const { name, phone_number } = req.body;
         const normalizedPhone = sanitizePhone(phone_number);
 
@@ -368,25 +361,23 @@ const createUser = async (req, res, next) => {
         }
 
         // Check for existing user
-        const existing = await User.findOne({ phone_number: normalizedPhone });
+        const existing = await UserRepository.findByPhone(normalizedPhone);
         if (existing) {
             return response.conflict(res, 'User with this phone number already exists');
         }
 
-        const newUser = new User({
+        const newUser = await UserRepository.create({
             name: sanitizeName(name),
             phone_number: normalizedPhone,
             isVerified: false, // Must set security questions before full auth
             createdByAdmin: req.admin.adminId
         });
 
-        await newUser.save();
-
         response.created(res, {
             id: newUser._id,
             name: newUser.name,
             phone_number: newUser.phone_number,
-            isVerified: newUser.isVerified
+            isVerified: newUser.isVerified || newUser.is_verified
         }, 'User created successfully. User must set security questions on first login.');
     } catch (error) {
         next(error);
@@ -398,15 +389,13 @@ const createUser = async (req, res, next) => {
  */
 const getAllUsers = async (req, res, next) => {
     try {
-        const User = require('../models/User');
         const { page = 1, limit = 50, search } = req.query;
 
         const filter = {};
         if (search) {
-            const safeSearch = escapeRegex(search);
             filter.$or = [
-                { name: { $regex: safeSearch, $options: 'i' } },
-                { phone_number: { $regex: safeSearch, $options: 'i' } }
+                { name: { $regex: search } },
+                { phone_number: { $regex: search } }
             ];
         }
 
@@ -414,13 +403,12 @@ const getAllUsers = async (req, res, next) => {
         const limitNum = Math.min(parseInt(limit), 100);
 
         const [users, total] = await Promise.all([
-            User.find(filter)
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limitNum)
-                .select('-securityQuestions')
-                .lean(),
-            User.countDocuments(filter)
+            UserRepository.find(filter, {
+                sort: { createdAt: -1 },
+                skip,
+                limit: limitNum
+            }),
+            UserRepository.count(filter)
         ]);
 
         response.success(res, {
@@ -443,7 +431,7 @@ const getAllUsers = async (req, res, next) => {
  */
 const getCurrentAdmin = async (req, res, next) => {
     try {
-        const admin = await Admin.findById(req.admin.adminId);
+        const admin = await AdminRepository.findById(req.admin.adminId);
         if (!admin) {
             return response.unauthorized(res, 'Admin account no longer exists');
         }
@@ -453,7 +441,7 @@ const getCurrentAdmin = async (req, res, next) => {
             const created = await createSession({
                 type: SESSION_TYPES.ADMIN,
                 accountId: admin._id,
-                tokenVersion: admin.tokenVersion || 0
+                tokenVersion: admin.tokenVersion || admin.token_version || 0
             });
             sid = created.sid;
         }
@@ -478,7 +466,7 @@ const getCurrentAdmin = async (req, res, next) => {
 
         response.success(res, {
             adminId: admin._id,
-            ...admin.toSafeObject(),
+            ...AdminRepository.toSafeObject(admin),
             token
         });
     } catch (error) {
@@ -497,10 +485,7 @@ const logout = async (req, res, next) => {
             return response.unauthorized(res, 'No token provided');
         }
 
-        const admin = await Admin.findByIdAndUpdate(
-            adminId,
-            { $inc: { tokenVersion: 1 } }
-        );
+        const admin = await AdminRepository.incrementTokenVersion(adminId);
 
         if (!admin) {
             return response.unauthorized(res, 'Admin account no longer exists');

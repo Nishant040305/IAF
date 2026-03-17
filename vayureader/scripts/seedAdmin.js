@@ -5,10 +5,10 @@
  */
 
 require('dotenv').config();
-const mongoose = require('mongoose');
-const Admin = require('../src/models/Admin');
+const { connectPostgres, disconnectPostgres } = require('../src/db/postgres');
+const { AdminRepository } = require('../src/repositories');
 const { hashPassword } = require('../src/services/password.service');
-const { connectDB } = require('../src/config/database');
+const { database } = require('../src/config/environment');
 
 const seedAdmin = async () => {
     try {
@@ -23,10 +23,10 @@ const seedAdmin = async () => {
         const [name, contact, password] = args;
 
         console.log('Connecting to database...');
-        await connectDB();
+        await connectPostgres(database.postgres);
 
         // Check if exists
-        const existing = await Admin.findOne({ contact });
+        const existing = await AdminRepository.findByContact(contact);
         if (existing) {
             console.error('❌ Admin with this contact already exists!');
             process.exit(1);
@@ -36,16 +36,13 @@ const seedAdmin = async () => {
         const passwordHash = await hashPassword(password);
 
         console.log('Creating Super Admin...');
-        const admin = new Admin({
+        const admin = await AdminRepository.create({
             name,
             contact,
             passwordHash,
-            isSuperAdmin: true,
-            permissions: Admin.PERMISSIONS, // Super admin gets all permissions
+            permissions: AdminRepository.PERMISSIONS, // Super admin gets all permissions
             createdBy: 'System Seed'
         });
-
-        await admin.save();
 
         console.log('');
         console.log('✅ Super Admin Created Successfully!');

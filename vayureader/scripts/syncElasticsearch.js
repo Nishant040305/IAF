@@ -2,34 +2,34 @@
 /**
  * Elasticsearch Sync Script
  * 
- * Syncs all MongoDB words and abbreviations to Elasticsearch.
+ * Syncs all PostgreSQL words and abbreviations to Elasticsearch.
  * Run this after initial ES setup or to rebuild indices.
  * 
  * Usage: node scripts/syncElasticsearch.js
  */
 
 require('dotenv').config();
-const mongoose = require('mongoose');
+const { connectPostgres, disconnectPostgres } = require('../src/db/postgres');
 const { esClient, INDICES, initializeIndices, isConnected } = require('../src/config/elasticsearch');
 const { bulkIndexWords, bulkIndexAbbreviations } = require('../src/services/search.service');
-const Word = require('../src/models/Word');
-const Abbreviation = require('../src/models/Abbreviation');
+const { WordRepository, AbbreviationRepository } = require('../src/repositories');
+const { database } = require('../src/config/environment');
 
 const BATCH_SIZE = 500;
 
 async function syncWords() {
     console.log('[Sync] Starting words sync...');
 
-    const total = await Word.countDocuments();
+    const total = await WordRepository.count({});
     console.log(`[Sync] Found ${total} words to sync`);
 
     let processed = 0;
 
     for (let skip = 0; skip < total; skip += BATCH_SIZE) {
-        const words = await Word.find()
-            .skip(skip)
-            .limit(BATCH_SIZE)
-            .lean();
+        const words = await WordRepository.find({}, {
+            skip,
+            limit: BATCH_SIZE
+        });
 
         await bulkIndexWords(words);
         processed += words.length;
@@ -42,16 +42,16 @@ async function syncWords() {
 async function syncAbbreviations() {
     console.log('[Sync] Starting abbreviations sync...');
 
-    const total = await Abbreviation.countDocuments();
+    const total = await AbbreviationRepository.count({});
     console.log(`[Sync] Found ${total} abbreviations to sync`);
 
     let processed = 0;
 
     for (let skip = 0; skip < total; skip += BATCH_SIZE) {
-        const abbreviations = await Abbreviation.find()
-            .skip(skip)
-            .limit(BATCH_SIZE)
-            .lean();
+        const abbreviations = await AbbreviationRepository.find({}, {
+            skip,
+            limit: BATCH_SIZE
+        });
 
         await bulkIndexAbbreviations(abbreviations);
         processed += abbreviations.length;
@@ -63,9 +63,9 @@ async function syncAbbreviations() {
 
 async function main() {
     try {
-        console.log('[Sync] Connecting to MongoDB...');
-        await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/vayureader');
-        console.log('[Sync] MongoDB connected');
+        console.log('[Sync] Connecting to PostgreSQL...');
+        await connectPostgres(database.postgres);
+        console.log('[Sync] PostgreSQL connected');
 
         console.log('[Sync] Checking Elasticsearch connection...');
         const connected = await isConnected();
@@ -96,7 +96,7 @@ async function main() {
 
             if (isPurge) {
                 console.log('[Sync] 🗑️ Purge complete. Indices deleted. Exiting.');
-                await mongoose.disconnect();
+                await disconnectPostgres();
                 process.exit(0);
             }
         }
@@ -113,8 +113,8 @@ async function main() {
         console.error('[Sync] ❌ Error:', error.message);
         process.exit(1);
     } finally {
-        await mongoose.disconnect();
-        console.log('[Sync] MongoDB disconnected');
+        await disconnectPostgres();
+        console.log('[Sync] PostgreSQL disconnected');
         process.exit(0);
     }
 }

@@ -9,7 +9,12 @@ import {
 import { createDpopProof, clearDpopKeys } from './dpop';
 
 const BASE_URL = window.__ENV__?.REACT_APP_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || '';
+const SECURITY_BYPASS = (window.__ENV__?.REACT_APP_SECURITY_BYPASS || process.env.REACT_APP_SECURITY_BYPASS || '') === 'true';
+
 console.log('[API DEBUG] Base URL:', BASE_URL);
+if (SECURITY_BYPASS) {
+    console.warn('[API] ⚠️ SECURITY_BYPASS is ON — E2EE encryption and DPoP are DISABLED');
+}
 
 // =============================================================================
 // EXCLUDED PATHS — never encrypted (login / recovery / public)
@@ -81,16 +86,20 @@ api.interceptors.request.use(async (config) => {
                 config.headers.Authorization = `Bearer ${token}`;
             }
 
-            const requestUri = api.getUri(config);
-            const proof = await createDpopProof({
-                method: config.method || 'GET',
-                requestUri,
-                accessToken: token
-            });
-            config.headers.DPoP = proof;
+            // Skip DPoP when security bypass is active
+            if (!SECURITY_BYPASS) {
+                const requestUri = api.getUri(config);
+                const proof = await createDpopProof({
+                    method: config.method || 'GET',
+                    requestUri,
+                    accessToken: token
+                });
+                config.headers.DPoP = proof;
+            }
         }
 
-        if (isExcluded(config.url) || !token) return config;
+        // Skip encryption when security bypass is active
+        if (SECURITY_BYPASS || isExcluded(config.url) || !token) return config;
 
         // Skip multipart (file uploads)
         const ct = config.headers?.['Content-Type'] || config.headers?.['content-type'] || '';
@@ -117,6 +126,9 @@ api.interceptors.request.use(async (config) => {
 
 api.interceptors.response.use(
     async (response) => {
+        // Skip decryption when security bypass is active
+        if (SECURITY_BYPASS) return response;
+
         // Encrypted response arrives as text/plain
         const contentType = response.headers?.['content-type'] || '';
         if (contentType.includes('text/plain') && typeof response.data === 'string' && response.data.length > 0) {
@@ -138,19 +150,21 @@ api.interceptors.response.use(
         return response;
     },
     async (error) => {
-        // Try to decrypt encrypted error responses
-        const errorContentType = error.response?.headers?.['content-type'] || '';
-        if (errorContentType.includes('text/plain') && error.response && typeof error.response.data === 'string' && error.response.data.length > 0) {
-            const token = getAdminToken();
-            if (token && !isExcluded(error.response.config?.url)) {
-                try {
-                    const key = await getSessionKey(token);
-                    if (key) {
-                        const decrypted = await decrypt(error.response.data, key);
-                        error.response.data = JSON.parse(decrypted);
+        // Try to decrypt encrypted error responses (skip if bypass active)
+        if (!SECURITY_BYPASS) {
+            const errorContentType = error.response?.headers?.['content-type'] || '';
+            if (errorContentType.includes('text/plain') && error.response && typeof error.response.data === 'string' && error.response.data.length > 0) {
+                const token = getAdminToken();
+                if (token && !isExcluded(error.response.config?.url)) {
+                    try {
+                        const key = await getSessionKey(token);
+                        if (key) {
+                            const decrypted = await decrypt(error.response.data, key);
+                            error.response.data = JSON.parse(decrypted);
+                        }
+                    } catch {
+                        showSecurityAlert();
                     }
-                } catch {
-                    showSecurityAlert();
                 }
             }
         }

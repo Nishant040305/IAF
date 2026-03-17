@@ -9,6 +9,8 @@ import {
   decrypt,
   clearKeyCache,
 } from './encryption';
+import { SECURITY_BYPASS } from '@/constants/config';
+
 
 type UnauthorizedHandler = () => Promise<void> | void;
 
@@ -95,7 +97,8 @@ apiClient.interceptors.request.use(async (config) => {
   }
 
   // --- E2EE: Encrypt request body → text/plain ---
-  if (!isExcluded(url) && token) {
+  // Skip encryption when security bypass is active
+  if (!SECURITY_BYPASS && !isExcluded(url) && token) {
     const ct = config.headers?.['Content-Type'] || '';
     const isMultipart = typeof ct === 'string' && ct.includes('multipart/form-data');
 
@@ -121,6 +124,9 @@ apiClient.interceptors.request.use(async (config) => {
 
 apiClient.interceptors.response.use(
   async (response) => {
+    // Skip decryption when security bypass is active
+    if (SECURITY_BYPASS) return response;
+
     // Encrypted response arrives as text/plain
     const contentType = response.headers?.['content-type'] || '';
     if (contentType.includes('text/plain') && typeof response.data === 'string' && response.data.length > 0 && !isExcluded(response.config?.url)) {
@@ -142,19 +148,21 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error) => {
-    // Try to decrypt encrypted error responses
-    const errorContentType = error?.response?.headers?.['content-type'] || '';
-    if (errorContentType.includes('text/plain') && error?.response && typeof error.response.data === 'string' && error.response.data.length > 0) {
-      const token = await getToken();
-      if (token && !isExcluded(error.response.config?.url)) {
-        try {
-          const key = getSessionKey(token);
-          if (key) {
-            const decrypted = await decrypt(error.response.data, key);
-            error.response.data = JSON.parse(decrypted);
+    // Try to decrypt encrypted error responses (skip if bypass active)
+    if (!SECURITY_BYPASS) {
+      const errorContentType = error?.response?.headers?.['content-type'] || '';
+      if (errorContentType.includes('text/plain') && error?.response && typeof error.response.data === 'string' && error.response.data.length > 0) {
+        const token = await getToken();
+        if (token && !isExcluded(error.response.config?.url)) {
+          try {
+            const key = getSessionKey(token);
+            if (key) {
+              const decrypted = await decrypt(error.response.data, key);
+              error.response.data = JSON.parse(decrypted);
+            }
+          } catch {
+            showSecurityAlert();
           }
-        } catch {
-          showSecurityAlert();
         }
       }
     }

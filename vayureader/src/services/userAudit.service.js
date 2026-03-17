@@ -6,14 +6,14 @@
  * @module services/userAudit.service
  */
 
-const UserAudit = require('../models/UserAudit');
-const { USER_ACTIONS } = require('../models/UserAudit');
+const { UserAuditRepository } = require('../repositories');
+const USER_ACTIONS = UserAuditRepository.USER_ACTIONS;
 
 /**
  * Logs a user action.
  * Non-blocking: will not throw errors to avoid breaking main flow.
  * 
- * @param {string} userId - User's MongoDB ObjectId
+ * @param {string} userId - User's ID
  * @param {string} phone_number - User's phone number
  * @param {string} action - Action type (LOGIN, DEVICE_CHANGE, READ_PDF)
  * @param {string} deviceId - Device ID from which action was performed
@@ -21,17 +21,15 @@ const { USER_ACTIONS } = require('../models/UserAudit');
  */
 const logUserAction = (userId, phone_number, action, deviceId, metadata = {}) => {
     try {
-        const auditEntry = new UserAudit({
+        // Fire and forget - don't await, but catch errors
+        UserAuditRepository.create({
             userId,
             phone_number,
             action,
             deviceId,
             metadata,
             timestamp: new Date()
-        });
-
-        // Fire and forget - don't await, but catch errors
-        auditEntry.save()
+        })
             .then(() => {
                 if (process.env.NODE_ENV !== 'production') {
                     console.log(`📋 User Audit: ${action} by ${phone_number} on device ${deviceId}`);
@@ -52,7 +50,7 @@ const logUserAction = (userId, phone_number, action, deviceId, metadata = {}) =>
  */
 const logLogin = (user, deviceId) => {
     return logUserAction(
-        user._id,
+        user._id || user.id,
         user.phone_number,
         USER_ACTIONS.LOGIN,
         deviceId,
@@ -69,7 +67,7 @@ const logLogin = (user, deviceId) => {
  */
 const logDeviceChange = (user, previousDeviceId, newDeviceId) => {
     return logUserAction(
-        user._id,
+        user._id || user.id,
         user.phone_number,
         USER_ACTIONS.DEVICE_CHANGE,
         newDeviceId,
@@ -86,7 +84,7 @@ const logDeviceChange = (user, previousDeviceId, newDeviceId) => {
  */
 const logPdfRead = (user, deviceId, pdfInfo) => {
     return logUserAction(
-        user.userId || user._id,
+        user.userId || user._id || user.id,
         user.phone_number,
         USER_ACTIONS.READ_PDF,
         deviceId,
@@ -105,7 +103,7 @@ const logPdfRead = (user, deviceId, pdfInfo) => {
  */
 const logNameChange = (user, deviceId, previousName, requestedName, allowed = true) => {
     return logUserAction(
-        user._id,
+        user._id || user.id,
         user.phone_number,
         USER_ACTIONS.NAME_CHANGE,
         deviceId,

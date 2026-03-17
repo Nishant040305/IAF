@@ -6,11 +6,12 @@
  * Creates a new user in the database.
  */
 
-const mongoose = require('mongoose');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-const User = require('../src/models/User');
+const { connectPostgres, disconnectPostgres } = require('../src/db/postgres');
+const { UserRepository } = require('../src/repositories');
+const { database } = require('../src/config/environment');
 
 const args = process.argv.slice(2);
 
@@ -36,10 +37,10 @@ const createUser = async () => {
 
     try {
         console.log('Connecting to database...');
-        await mongoose.connect(process.env.MONGODB_URI);
+        await connectPostgres(database.postgres);
         console.log('Connected.');
 
-        const existing = await User.findOne({ phone_number: phone });
+        const existing = await UserRepository.findByPhone(phone);
         if (existing) {
             console.log(`\n⚠️ User with phone ${phone} already exists.`);
             console.log(`   Name: ${existing.name}`);
@@ -47,12 +48,11 @@ const createUser = async () => {
             process.exit(0);
         }
 
-        const newUser = new User({
+        const newUser = await UserRepository.create({
             name,
             phone_number: phone
         });
 
-        await newUser.save();
         console.log('\n✅ User created successfully!');
         console.log(`   Name: ${name}`);
         console.log(`   Phone: ${phone}`);

@@ -6,7 +6,7 @@
  * @module services/audit.service
  */
 
-const AuditLog = require('../models/AuditLog');
+const { AuditLogRepository } = require('../repositories');
 
 /**
  * Resource types that can be audited.
@@ -44,17 +44,15 @@ const logAction = async (action, resourceType, resourceId, admin, details = {}) 
             return;
         }
 
-        const logEntry = new AuditLog({
+        await AuditLogRepository.create({
             action,
             resourceType,
-            resourceId,
+            resourceId: String(resourceId || ''),
             adminId: admin._id || admin.id,
             adminName: admin.name || 'Unknown',
             adminContact: admin.contact || 'Unknown',
             details
         });
-
-        await logEntry.save();
     } catch (error) {
         console.error('Audit Log Error:', error.message);
         // We log the error but don't rethrow to avoid breaking the main flow

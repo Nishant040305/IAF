@@ -55,7 +55,6 @@ app.set('trust proxy', 1);
 const helmet = require('helmet');
 const hpp = require('hpp');
 const compression = require('compression');
-const mongoSanitize = require('express-mongo-sanitize');
 
 // =============================================================================
 // MIDDLEWARE
@@ -73,8 +72,6 @@ app.use(helmet({
 // Prevent Parameter Pollution
 app.use(hpp());
 
-// Sanitize MongoDB inputs (NoSQL Injection prevention)
-app.use(mongoSanitize());
 
 
 // Response Compression (skip for SSE - compression buffers small chunks, blocking real-time events)
@@ -215,7 +212,7 @@ app.use(errorHandler);
 
 const startServer = async () => {
     try {
-        // Connect to MongoDB
+        // Connect to databases
         await connectDB();
 
         // Connect to Redis
@@ -231,6 +228,13 @@ const startServer = async () => {
             console.log(`║  Server:     http://localhost:${server.port}                   ║`);
             console.log(`║  Health:     http://localhost:${server.port}/health             ║`);
             console.log(`║  Environment: ${server.nodeEnv.padEnd(12)}                      ║`);
+            if (server.securityBypass) {
+                console.log('╠════════════════════════════════════════════════════════╣');
+                console.log('║  ⚠️  SECURITY_BYPASS: ON                               ║');
+                console.log('║     E2EE encryption: DISABLED                         ║');
+                console.log('║     DPoP proofs:     DISABLED                         ║');
+                console.log('║     Multipart E2EE:  DISABLED                         ║');
+            }
             console.log('╠════════════════════════════════════════════════════════╣');
             console.log('║  Endpoints:                                            ║');
             console.log('║    /api/auth         - User authentication             ║');

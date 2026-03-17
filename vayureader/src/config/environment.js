@@ -13,7 +13,7 @@ require('dotenv').config();
 // REQUIRED ENVIRONMENT VARIABLES
 // =============================================================================
 const REQUIRED_ENV_VARS = [
-    'MONGODB_URI',
+    'POSTGRES_URI',
     'JWT_SECRET',
     'OTP_GATEWAY_URL'
 ];
@@ -54,45 +54,31 @@ const server = {
     isDevelopment: process.env.NODE_ENV !== 'production',
     // SECURITY: TESTING mode is NEVER allowed in production to prevent
     // SameSite=None cookies which would disable CSRF protection.
-    isTesting: process.env.TESTING === 'true' && process.env.NODE_ENV !== 'production'
+    isTesting: process.env.TESTING === 'true' && process.env.NODE_ENV !== 'production',
+    // SECURITY_BYPASS: Disables E2EE encryption and DPoP for development/debugging.
+    // NEVER allowed in production.
+    securityBypass: process.env.SECURITY_BYPASS === 'true' && process.env.NODE_ENV !== 'production'
 };
 
 /**
  * Database configuration
  */
-
-// Determine TLS setting: manual override takes priority, then auto-detect for production
-const getTlsSetting = () => {
-    // Manual override via environment variable
-    if (process.env.MONGODB_TLS === 'true') return true;
-    if (process.env.MONGODB_TLS === 'false') return false;
-
-    // Auto-detect: Enable TLS in production for non-local, non-SRV connections
-    // MongoDB Atlas SRV connections (mongodb+srv://) handle TLS automatically
-    const uri = process.env.MONGODB_URI || '';
-    const isProduction = process.env.NODE_ENV === 'production';
-    const isLocalhost = uri.includes('localhost') || uri.includes('127.0.0.1');
-    const isSRV = uri.startsWith('mongodb+srv://');
-
-    // Only explicitly set TLS for standard (non-SRV) connections in production to remote hosts
-    if (isProduction && !isLocalhost && !isSRV) {
-        return true;
-    }
-
-    // For SRV connections or local connections, let MongoDB driver handle TLS
-    return undefined;
-};
-
 const database = {
-    uri: process.env.MONGODB_URI,
-    options: {
-        // TLS setting: manual override > auto-detect > driver default
-        ...(getTlsSetting() !== undefined ? { tls: getTlsSetting() } : {}),
-        serverSelectionTimeoutMS: 10000,  // Increased for cloud deployments
-        socketTimeoutMS: 45000,
-        // Connection pool settings
-        maxPoolSize: parseInt(process.env.MONGODB_MAX_POOL_SIZE || '50', 10),
-        minPoolSize: parseInt(process.env.MONGODB_MIN_POOL_SIZE || '5', 10)
+    postgres: {
+        connectionString: process.env.POSTGRES_URI,
+        max: parseInt(process.env.PG_MAX_POOL_SIZE || '50', 10),
+        min: parseInt(process.env.PG_MIN_POOL_SIZE || '5', 10),
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
+        ...(process.env.NODE_ENV === 'production' && process.env.PG_SSL !== 'false' ? {
+            ssl: { rejectUnauthorized: process.env.PG_SSL_REJECT_UNAUTHORIZED !== 'false' }
+        } : {})
+    },
+    clickhouse: {
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        database: process.env.CLICKHOUSE_DATABASE || 'vayureader_logs',
+        username: process.env.CLICKHOUSE_USER || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || ''
     }
 };
 
@@ -144,7 +130,8 @@ const redis = {
  * DPoP (Proof-of-Possession) configuration
  */
 const dpop = {
-    enabled: process.env.DPOP_ENABLED !== 'false',
+    // DPoP is automatically disabled when SECURITY_BYPASS is active
+    enabled: server.securityBypass ? false : process.env.DPOP_ENABLED !== 'false',
     proofTtlSeconds: parseInt(process.env.DPOP_PROOF_TTL_SECONDS || '120', 10),
     maxIatSkewSeconds: parseInt(process.env.DPOP_MAX_IAT_SKEW_SECONDS || '90', 10),
     allowQueryProof: process.env.DPOP_ALLOW_QUERY_PROOF !== 'false'

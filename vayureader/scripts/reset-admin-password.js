@@ -9,9 +9,10 @@
  */
 
 require('dotenv').config();
-const mongoose = require('mongoose');
-const Admin = require('../src/models/Admin');
+const { connectPostgres, disconnectPostgres } = require('../src/db/postgres');
+const { AdminRepository } = require('../src/repositories');
 const { hashPassword } = require('../src/services/password.service');
+const { database } = require('../src/config/environment');
 
 const args = process.argv.slice(2);
 
@@ -35,12 +36,12 @@ async function resetPassword() {
     }
 
     try {
-        // Connect to MongoDB
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log('Connected to MongoDB');
+        // Connect to PostgreSQL
+        await connectPostgres(database.postgres);
+        console.log('Connected to PostgreSQL');
 
         // Find admin
-        const admin = await Admin.findOne({ contact });
+        const admin = await AdminRepository.findByContact(contact);
 
         if (!admin) {
             console.error(`Error: No admin found with contact: ${contact}`);
@@ -51,20 +52,18 @@ async function resetPassword() {
         const passwordHash = await hashPassword(password);
 
         // Update password
-        admin.passwordHash = passwordHash;
-        await admin.save();
+        await AdminRepository.updateById(admin._id, { passwordHash });
 
         console.log(`\n✅ Password reset successfully for:`);
         console.log(`   Name: ${admin.name}`);
         console.log(`   Contact: ${admin.contact}`);
-        console.log(`   Type: ${admin.isSuperAdmin ? 'Super Admin' : 'Sub-Admin'}`);
         console.log(`\n   The admin can now login with the new password.`);
 
     } catch (error) {
         console.error('Error:', error.message);
         process.exit(1);
     } finally {
-        await mongoose.disconnect();
+        await disconnectPostgres();
     }
 }
 

@@ -1,71 +1,55 @@
 /**
  * Audit Controller
  * 
- * Handles audit log queries.
+ * Handles admin audit log queries with filtering and pagination.
  * 
  * @module controllers/audit.controller
  */
 
-const AuditLog = require('../models/AuditLog');
-const { escapeRegex } = require('../utils/sanitize');
+const { AuditLogRepository } = require('../repositories');
 const response = require('../utils/response');
+const { escapeRegex } = require('../utils/sanitize');
 
 /**
- * Get paginated audit logs with optional filters.
+ * Get admin audit logs with optional filters.
+ * Query params: action, resourceType, adminName, startDate, endDate, page, limit
  */
-const getLogs = async (req, res, next) => {
+const getAuditLogs = async (req, res, next) => {
     try {
-        const {
-            page = 1,
-            limit = 50,
-            action,
-            resourceType,
-            adminName,
-            startDate,
-            endDate
-        } = req.query;
+        const { action, resourceType, adminName, startDate, endDate } = req.query;
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+        const skip = (page - 1) * limit;
 
         // Build filter
         const filter = {};
+        if (action) filter.action = action;
+        if (resourceType) filter.resourceType = resourceType;
+        if (adminName) filter.adminName = adminName;
 
-        if (action) {
-            filter.action = action;
-        }
-
-        if (resourceType) {
-            filter.resourceType = resourceType;
-        }
-
-        if (adminName) {
-            const safeName = escapeRegex(adminName);
-            filter.adminName = { $regex: safeName, $options: 'i' };
-        }
-
+        // Date range filter
         if (startDate || endDate) {
             filter.timestamp = {};
             if (startDate) filter.timestamp.$gte = new Date(startDate);
             if (endDate) filter.timestamp.$lte = new Date(endDate);
         }
 
-        const skip = (parseInt(page) - 1) * parseInt(limit);
-        const limitNum = Math.min(parseInt(limit), 100); // Cap at 100
-
         const [logs, total] = await Promise.all([
-            AuditLog.find(filter)
-                .sort({ timestamp: -1 })
-                .skip(skip)
-                .limit(limitNum)
-                .lean(),
-            AuditLog.countDocuments(filter)
+            AuditLogRepository.find(filter, {
+                sort: { timestamp: -1 },
+                skip,
+                limit
+            }),
+            AuditLogRepository.count(filter)
         ]);
 
         response.success(res, {
             logs,
             pagination: {
-                page: parseInt(page),
-                limit: limitNum,
+                page,
+                limit,
                 total,
-                pages: Math.ceil(total / limitNum)
+                totalPages: Math.ceil(total / limit)
             }
         });
     } catch (error) {
@@ -74,40 +58,18 @@ const getLogs = async (req, res, next) => {
 };
 
 /**
- * Get audit statistics.
+ * Get audit logs aggregated by resource type and action.
  */
-const getStats = async (req, res, next) => {
+const getAuditStats = async (req, res, next) => {
     try {
-        const [byResourceType, topAdmins, totalLogs] = await Promise.all([
-            AuditLog.aggregate([
-                {
-                    $group: {
-                        _id: { action: '$action', resourceType: '$resourceType' },
-                        count: { $sum: 1 }
-                    }
-                },
-                {
-                    $group: {
-                        _id: '$_id.resourceType',
-                        actions: {
-                            $push: { action: '$_id.action', count: '$count' }
-                        },
-                        total: { $sum: '$count' }
-                    }
-                }
-            ]),
-            AuditLog.aggregate([
-                { $group: { _id: '$adminName', count: { $sum: 1 } } },
-                { $sort: { count: -1 } },
-                { $limit: 10 }
-            ]),
-            AuditLog.countDocuments()
+        const [byResourceType, topAdmins] = await Promise.all([
+            AuditLogRepository.getStatsByResourceType(),
+            AuditLogRepository.getTopAdmins(10)
         ]);
 
         response.success(res, {
             byResourceType,
-            topAdmins,
-            totalLogs
+            topAdmins
         });
     } catch (error) {
         next(error);
@@ -115,6 +77,6 @@ const getStats = async (req, res, next) => {
 };
 
 module.exports = {
-    getLogs,
-    getStats
+    getAuditLogs,
+    getAuditStats
 };

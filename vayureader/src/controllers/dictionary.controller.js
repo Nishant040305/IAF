@@ -6,7 +6,7 @@
  * @module controllers/dictionary.controller
  */
 
-const Word = require('../models/Word');
+const { WordRepository } = require('../repositories');
 const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
 const { escapeRegex, createExactMatchRegex, sanitizeSynonymArray } = require('../utils/sanitize');
@@ -35,14 +35,9 @@ const lookupWord = async (req, res, next) => {
             return response.success(res, JSON.parse(cachedData));
         }
 
-        const safeWord = escapeRegex(word);
-
         const [wordDoc, relatedWords] = await Promise.all([
-            Word.findOne({ word: createExactMatchRegex(word) }).lean(),
-            Word.find({ word: { $regex: safeWord, $options: 'i' } })
-                .limit(20)
-                .select('word')
-                .lean()
+            WordRepository.findByWord(word),
+            WordRepository.findByPattern(word, 20)
         ]);
 
         if (!wordDoc) {
@@ -85,10 +80,10 @@ const getWords = async (req, res, next) => {
             return response.success(res, JSON.parse(cachedData));
         }
 
-        const words = await Word.find()
-            .limit(100)
-            .select('word')
-            .lean();
+        const words = await WordRepository.find({}, {
+            limit: 100,
+            select: ['word']
+        });
 
         const result = {
             total: words.length,
@@ -115,12 +110,12 @@ const getAllWords = async (req, res, next) => {
         const skip = (page - 1) * limit;
 
         const [words, total] = await Promise.all([
-            Word.find({})
-                .sort({ word: 1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(),
-            Word.countDocuments({})
+            WordRepository.find({}, {
+                sort: { word: 1 },
+                skip,
+                limit
+            }),
+            WordRepository.count({})
         ]);
 
         response.success(res, {
@@ -138,7 +133,7 @@ const getAllWords = async (req, res, next) => {
 };
 
 /**
- * Search words using Elasticsearch with MongoDB fallback.
+ * Search words using Elasticsearch with PostgreSQL fallback.
  * Cached in Redis for 30 minutes.
  */
 const searchWords = async (req, res, next) => {
@@ -161,15 +156,15 @@ const searchWords = async (req, res, next) => {
         // Try Elasticsearch first
         let results = await esSearchWords(searchTerm, 50);
 
-        // Fallback to MongoDB if ES unavailable
+        // Fallback to PostgreSQL if ES unavailable
         if (results === null) {
-            const safeSearch = escapeRegex(searchTerm);
-            results = await Word.find({
-                word: { $regex: safeSearch, $options: 'i' }
-            })
-                .limit(50)
-                .select('word meanings synonyms antonyms')
-                .lean();
+            results = await WordRepository.find(
+                { word: { $regex: searchTerm } },
+                {
+                    limit: 50,
+                    select: ['word', 'meanings', 'synonyms', 'antonyms']
+                }
+            );
         }
 
         // Cache search results for 30 minutes
@@ -193,7 +188,7 @@ const createWord = async (req, res, next) => {
         }
 
         // Check for existing word
-        const existing = await Word.findOne({ word: word.toUpperCase() });
+        const existing = await WordRepository.findByWord(word);
         if (existing) {
             return response.conflict(res, 'Word already exists');
         }
@@ -224,14 +219,12 @@ const createWord = async (req, res, next) => {
             };
         });
 
-        const newWord = new Word({
+        const newWord = await WordRepository.create({
             word: word.toUpperCase(),
             meanings: formattedMeanings,
             synonyms: sanitizedSynonyms.valid,
             antonyms: sanitizedAntonyms.valid
         });
-
-        await newWord.save();
 
         await logCreate(RESOURCE_TYPES.DICTIONARY, newWord._id, req.admin, {
             word: newWord.word
@@ -258,7 +251,7 @@ const updateWord = async (req, res, next) => {
             return response.badRequest(res, 'Word and at least one meaning required');
         }
 
-        const oldWord = await Word.findById(req.params.id);
+        const oldWord = await WordRepository.findById(req.params.id);
         if (!oldWord) {
             return response.notFound(res, 'Word not found');
         }
@@ -289,18 +282,12 @@ const updateWord = async (req, res, next) => {
             };
         });
 
-        const updateData = {
+        const updated = await WordRepository.updateById(req.params.id, {
             word: word.toUpperCase(),
             meanings: formattedMeanings,
             synonyms: sanitizedSynonyms.valid,
             antonyms: sanitizedAntonyms.valid
-        };
-
-        const updated = await Word.findByIdAndUpdate(
-            req.params.id,
-            updateData,
-            { new: true, runValidators: true }
-        );
+        });
 
         await logUpdate(RESOURCE_TYPES.DICTIONARY, updated._id, req.admin, {
             old: { word: oldWord.word },
@@ -327,13 +314,13 @@ const updateWord = async (req, res, next) => {
  */
 const deleteWord = async (req, res, next) => {
     try {
-        const word = await Word.findById(req.params.id);
+        const word = await WordRepository.findById(req.params.id);
 
         if (!word) {
             return response.notFound(res, 'Word not found');
         }
 
-        await Word.findByIdAndDelete(req.params.id);
+        await WordRepository.deleteById(req.params.id);
 
         await logDelete(RESOURCE_TYPES.DICTIONARY, req.params.id, req.admin, {
             word: word.word
@@ -414,12 +401,13 @@ const uploadDictionary = async (req, res, next) => {
         for (let i = 0; i < words.length; i += BATCH_SIZE) {
             const batch = words.slice(i, i + BATCH_SIZE);
             try {
-                const result = await Word.insertMany(batch, { ordered: false });
+                const result = await WordRepository.insertMany(batch, { ordered: false });
                 insertedCount += result.length;
+                duplicatesCount += batch.length - result.length;
             } catch (error) {
-                if (error.code === 11000) {
-                    insertedCount += error.result?.insertedIds?.length || 0;
-                    duplicatesCount += error.writeErrors?.length || 0;
+                if (error.code === '23505') {
+                    // Unique violation - handled by ON CONFLICT
+                    duplicatesCount += batch.length;
                 } else {
                     throw error;
                 }
@@ -429,7 +417,7 @@ const uploadDictionary = async (req, res, next) => {
         // Fire-and-forget ES sync so large uploads are not blocked by indexing latency.
         void (async () => {
             try {
-                const insertedWords = await Word.find({ word: { $in: words.map(w => w.word) } }).lean();
+                const insertedWords = await WordRepository.findByWords(words.map(w => w.word));
                 if (insertedWords.length > 0) {
                     await bulkIndexWords(insertedWords);
                     console.log(`[ES] Indexed ${insertedWords.length} words`);
@@ -468,17 +456,18 @@ const uploadDictionary = async (req, res, next) => {
  */
 const exportDictionary = async (req, res, next) => {
     try {
-        const words = await Word.find({})
-            .sort({ word: 1 })
-            .lean();
+        const words = await WordRepository.find({}, {
+            sort: { word: 1 }
+        });
 
         // Format into { "WORD": { MEANINGS: [...], SYNONYMS: [...], ANTONYMS: [...] } }
         // to match the bulk upload format
         const exportData = {};
 
         words.forEach(w => {
+            const meanings = Array.isArray(w.meanings) ? w.meanings : [];
             exportData[w.word] = {
-                MEANINGS: w.meanings.map(m => [
+                MEANINGS: meanings.map(m => [
                     m.partOfSpeech || '',
                     m.definition,
                     m.synonyms || [],

@@ -7,7 +7,7 @@
  * @module utils/sanitize
  */
 
-const mongoose = require('mongoose');
+
 
 /**
  * Escapes special regex characters to prevent ReDoS attacks.
@@ -26,19 +26,20 @@ const escapeRegex = (str) => {
 };
 
 /**
- * Validates if a string is a valid MongoDB ObjectId.
+ * Validates if a string is a valid UUID v4.
  * 
  * @param {string} id - String to validate
- * @returns {boolean} - True if valid ObjectId
+ * @returns {boolean} - True if valid UUID
  * 
  * @example
- * if (!isValidObjectId(req.params.id)) {
+ * if (!isValidId(req.params.id)) {
  *   return res.status(400).json({ error: 'Invalid ID format' });
  * }
  */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const isValidObjectId = (id) => {
-    return mongoose.Types.ObjectId.isValid(id) &&
-        new mongoose.Types.ObjectId(id).toString() === id;
+    return typeof id === 'string' && UUID_REGEX.test(id);
 };
 
 /**

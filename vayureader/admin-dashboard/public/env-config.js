@@ -4,4 +4,5 @@
 window.__ENV__ = {
     REACT_APP_API_BASE_URL: "",
     HTTPS: "true",
+    REACT_APP_SECURITY_BYPASS: "",
 };

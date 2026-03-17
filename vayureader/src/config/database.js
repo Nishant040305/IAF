@@ -1,62 +1,40 @@
 /**
  * Database Connection
  * 
- * Manages MongoDB connection with proper error handling and logging.
+ * Manages PostgreSQL + ClickHouse connections with proper error handling.
  * 
  * @module config/database
  */
 
-const mongoose = require('mongoose');
-const { database, server } = require('./environment');
+const { connectPostgres, disconnectPostgres } = require('../db/postgres');
+const { connectClickHouse, disconnectClickHouse } = require('../db/clickhouse');
+const { database } = require('./environment');
 
 /**
- * Establishes connection to MongoDB.
- * Includes retry logic and proper event handling.
- * 
+ * Establishes connections to both PostgreSQL and ClickHouse.
  * @returns {Promise<void>}
  */
 const connectDB = async () => {
     try {
-        // Configure mongoose settings
-        mongoose.set('strictQuery', true);
+        // Connect to PostgreSQL (general data)
+        await connectPostgres(database.postgres);
 
-        // Connect to MongoDB
-        await mongoose.connect(database.uri, database.options);
+        // Connect to ClickHouse (logs/analytics)
+        await connectClickHouse(database.clickhouse);
 
-        console.log('✅ MongoDB connected successfully');
-
-        // Log connection details in development
-        if (server.isDevelopment) {
-            const dbName = mongoose.connection.db.databaseName;
-            console.log(`   Database: ${dbName}`);
-        }
+        console.log('✅ All database connections established');
     } catch (error) {
-        console.error('❌ MongoDB connection failed:', error.message);
+        console.error('❌ Database connection failed:', error.message);
         process.exit(1);
     }
 };
 
-// =============================================================================
-// CONNECTION EVENT HANDLERS
-// =============================================================================
-
-mongoose.connection.on('error', (error) => {
-    console.error('❌ MongoDB error:', error.message);
-});
-
-mongoose.connection.on('disconnected', () => {
-    console.warn('⚠️ MongoDB disconnected');
-});
-
-mongoose.connection.on('reconnected', () => {
-    console.log('✅ MongoDB reconnected');
-});
-
 // Graceful shutdown
 process.on('SIGINT', async () => {
     try {
-        await mongoose.connection.close();
-        console.log('MongoDB connection closed through app termination');
+        await disconnectPostgres();
+        await disconnectClickHouse();
+        console.log('Database connections closed through app termination');
         process.exit(0);
     } catch (error) {
         console.error('Error during shutdown:', error);

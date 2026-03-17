@@ -8,8 +8,7 @@
 
 const { verifyToken } = require('../services/jwt.service');
 const response = require('../utils/response');
-const User = require('../models/User');
-const Admin = require('../models/Admin');
+const { UserRepository, AdminRepository } = require('../repositories');
 const { validateSession, SESSION_TYPES } = require('../services/session.service');
 
 /**
@@ -56,21 +55,25 @@ const authenticateUser = async (req, res, next) => {
         }
 
         // Check if user is blocked or deleted
-        const user = await User.findById(decoded.userId).select('isBlocked tokenVersion isVerified');
+        const user = await UserRepository.findById(decoded.userId, {
+            select: ['isBlocked', 'tokenVersion', 'isVerified']
+        });
         if (!user) {
             return response.unauthorized(res, 'User no longer exists');
         }
-        if (user.isBlocked) {
+        const isBlocked = user.isBlocked !== undefined ? user.isBlocked : user.is_blocked;
+        if (isBlocked) {
             return response.unauthorized(res, 'User is blocked');
         }
 
         // Enforce security questions setup
         const isSetupPath = req.path === '/security-setup' || req.path === '/api/recovery/setup' || req.path === '/setup';
-        if (!user.isVerified && !isSetupPath) {
+        const isVerified = user.isVerified !== undefined ? user.isVerified : user.is_verified;
+        if (!isVerified && !isSetupPath) {
             return response.forbidden(res, 'Security setup required');
         }
 
-        const currentTokenVersion = user.tokenVersion || 0;
+        const currentTokenVersion = user.tokenVersion || user.token_version || 0;
         if (decodedTokenVersion !== currentTokenVersion) {
             return response.unauthorized(res, 'Session expired. Please login again.');
         }
@@ -136,9 +139,12 @@ const optionalAuth = async (req, res, next) => {
             }
 
             // Validate user still exists and is not blocked
-            const user = await User.findById(decoded.userId).select('isBlocked tokenVersion isVerified');
-            if (user && !user.isBlocked) {
-                const currentTokenVersion = user.tokenVersion || 0;
+            const user = await UserRepository.findById(decoded.userId, {
+                select: ['isBlocked', 'tokenVersion', 'isVerified']
+            });
+            const isBlocked = user ? (user.isBlocked !== undefined ? user.isBlocked : user.is_blocked) : true;
+            if (user && !isBlocked) {
+                const currentTokenVersion = user.tokenVersion || user.token_version || 0;
                 if (decodedTokenVersion !== currentTokenVersion) {
                     return next();
                 }
@@ -166,13 +172,14 @@ const optionalAuth = async (req, res, next) => {
 
             // Mirror admin validation used by strict middleware:
             // ensure admin exists and token session is still valid.
-            const admin = await Admin.findById(decoded.adminId)
-                .select('name contact permissions tokenVersion');
+            const admin = await AdminRepository.findById(decoded.adminId, {
+                select: ['name', 'contact', 'permissions', 'tokenVersion']
+            });
             if (!admin) {
                 return next();
             }
 
-            const currentTokenVersion = admin.tokenVersion || 0;
+            const currentTokenVersion = admin.tokenVersion || admin.token_version || 0;
             if (decodedTokenVersion !== currentTokenVersion) {
                 return next();
             }

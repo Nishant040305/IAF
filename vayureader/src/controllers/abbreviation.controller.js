@@ -6,7 +6,7 @@
  * @module controllers/abbreviation.controller
  */
 
-const Abbreviation = require('../models/Abbreviation');
+const { AbbreviationRepository } = require('../repositories');
 const { logCreate, logUpdate, logDelete, RESOURCE_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
 const { escapeRegex, createExactMatchRegex, sanitizeTag } = require('../utils/sanitize');
@@ -23,7 +23,7 @@ const CACHE_TTL = {
 };
 
 /**
- * Search abbreviations using Elasticsearch with MongoDB fallback.
+ * Search abbreviations using Elasticsearch with PostgreSQL fallback.
  * Cached for 30 minutes.
  */
 const searchAbbreviations = async (req, res, next) => {
@@ -48,22 +48,15 @@ const searchAbbreviations = async (req, res, next) => {
             abbreviations = await esSearchAbbreviations(search, 100);
         }
 
-        // Fallback to MongoDB if ES unavailable or no search term
+        // Fallback to PostgreSQL if ES unavailable or no search term
         if (abbreviations === null || !search) {
-            let query = {};
             if (search) {
-                const safeSearch = escapeRegex(search);
-                query = {
-                    $or: [
-                        { abbreviation: { $regex: safeSearch, $options: 'i' } },
-                        { fullForm: { $regex: safeSearch, $options: 'i' } }
-                    ]
-                };
+                abbreviations = await AbbreviationRepository.searchByPattern(search, 100);
+            } else {
+                abbreviations = await AbbreviationRepository.find({}, {
+                    sort: { abbreviation: 1 }
+                });
             }
-
-            abbreviations = await Abbreviation.find(query)
-                .sort({ abbreviation: 1 })
-                .lean();
         }
 
         // Cache results
@@ -88,12 +81,12 @@ const getAllAbbreviations = async (req, res, next) => {
         const skip = (page - 1) * limit;
 
         const [abbreviations, total] = await Promise.all([
-            Abbreviation.find({})
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(),
-            Abbreviation.countDocuments({})
+            AbbreviationRepository.find({}, {
+                sort: { createdAt: -1 },
+                skip,
+                limit
+            }),
+            AbbreviationRepository.count({})
         ]);
 
         response.success(res, {
@@ -130,9 +123,7 @@ const getAbbreviation = async (req, res, next) => {
             return response.success(res, JSON.parse(cachedData));
         }
 
-        const result = await Abbreviation.findOne({
-            abbreviation: createExactMatchRegex(abbr)
-        }).lean();
+        const result = await AbbreviationRepository.findByAbbr(abbr);
 
         if (!result) {
             return response.notFound(res, 'Abbreviation not found');
@@ -157,9 +148,7 @@ const createAbbreviation = async (req, res, next) => {
         const { abbreviation, fullForm } = req.body;
 
         // Check for existing
-        const existing = await Abbreviation.findOne({
-            abbreviation: abbreviation.toUpperCase()
-        });
+        const existing = await AbbreviationRepository.findByAbbr(abbreviation);
 
         if (existing) {
             return response.conflict(res, 'Abbreviation already exists');
@@ -176,16 +165,14 @@ const createAbbreviation = async (req, res, next) => {
             return response.badRequest(res, `Invalid full form: ${fullFormCheck.error}`);
         }
 
-        const newAbbr = new Abbreviation({
+        const newAbbr = await AbbreviationRepository.create({
             abbreviation: abbreviation.toUpperCase(),
             fullForm: fullFormCheck.sanitized
         });
 
-        await newAbbr.save();
-
         await logCreate(RESOURCE_TYPES.ABBREVIATION, newAbbr._id, req.admin, {
             abbreviation: newAbbr.abbreviation,
-            fullForm: newAbbr.fullForm
+            fullForm: newAbbr.fullForm || newAbbr.full_form
         });
 
         // Invalidate relevant caches and sync to ES
@@ -205,7 +192,7 @@ const updateAbbreviation = async (req, res, next) => {
     try {
         const { abbreviation, fullForm } = req.body;
 
-        const oldAbbr = await Abbreviation.findById(req.params.id);
+        const oldAbbr = await AbbreviationRepository.findById(req.params.id);
         if (!oldAbbr) {
             return response.notFound(res, 'Abbreviation not found');
         }
@@ -221,18 +208,14 @@ const updateAbbreviation = async (req, res, next) => {
             return response.badRequest(res, `Invalid full form: ${fullFormCheck.error}`);
         }
 
-        const updated = await Abbreviation.findByIdAndUpdate(
-            req.params.id,
-            {
-                abbreviation: abbreviation.toUpperCase(),
-                fullForm: fullFormCheck.sanitized
-            },
-            { new: true, runValidators: true }
-        );
+        const updated = await AbbreviationRepository.updateById(req.params.id, {
+            abbreviation: abbreviation.toUpperCase(),
+            fullForm: fullFormCheck.sanitized
+        });
 
         await logUpdate(RESOURCE_TYPES.ABBREVIATION, updated._id, req.admin, {
-            old: { abbreviation: oldAbbr.abbreviation, fullForm: oldAbbr.fullForm },
-            new: { abbreviation: updated.abbreviation, fullForm: updated.fullForm }
+            old: { abbreviation: oldAbbr.abbreviation, fullForm: oldAbbr.fullForm || oldAbbr.full_form },
+            new: { abbreviation: updated.abbreviation, fullForm: updated.fullForm || updated.full_form }
         });
 
         // Invalidate caches for both old and new abbreviation
@@ -255,13 +238,13 @@ const updateAbbreviation = async (req, res, next) => {
  */
 const deleteAbbreviation = async (req, res, next) => {
     try {
-        const abbr = await Abbreviation.findById(req.params.id);
+        const abbr = await AbbreviationRepository.findById(req.params.id);
 
         if (!abbr) {
             return response.notFound(res, 'Abbreviation not found');
         }
 
-        await Abbreviation.findByIdAndDelete(req.params.id);
+        await AbbreviationRepository.deleteById(req.params.id);
 
         await logDelete(RESOURCE_TYPES.ABBREVIATION, req.params.id, req.admin, {
             abbreviation: abbr.abbreviation
@@ -307,7 +290,7 @@ const bulkUpload = async (req, res, next) => {
         }));
 
         // Use insertMany with ordered: false to skip duplicates instead of failing
-        const result = await Abbreviation.insertMany(formatted, { ordered: false });
+        const result = await AbbreviationRepository.insertMany(formatted, { ordered: false });
 
         await logCreate(RESOURCE_TYPES.ABBREVIATION, null, req.admin, {
             count: result.length,
@@ -333,21 +316,17 @@ const bulkUpload = async (req, res, next) => {
 
         response.created(res, { count: result.length }, `Successfully uploaded ${result.length} abbreviations`);
     } catch (error) {
-        if (error.code === 11000) {
-            // Handle duplicate keys gracefully
-            const insertedCount = error.result?.insertedIds?.length || 0;
-
+        if (error.code === '23505') {
+            // Handle duplicate keys gracefully (PostgreSQL unique violation)
             await logCreate(RESOURCE_TYPES.ABBREVIATION, 'bulk-upload-partial', req.admin, {
-                count: insertedCount,
-                message: 'Bulk upload abbreviations (with duplicates)',
-                duplicatesSkipped: abbreviations.length - insertedCount
+                message: 'Bulk upload abbreviations (with duplicates)'
             });
 
             // Still invalidate cache even for partial success (non-blocking)
             void invalidateAllAbbreviationCaches().catch((cacheError) => {
                 console.error('Cache invalidation error (all abbreviation):', cacheError.message);
             });
-            return response.success(res, { count: insertedCount }, `Uploaded ${insertedCount} abbreviations (duplicates skipped)`);
+            return response.success(res, { count: 0 }, 'Upload completed (duplicates skipped)');
         }
         next(error);
     }
@@ -358,11 +337,7 @@ const bulkUpload = async (req, res, next) => {
  */
 const exportAbbreviations = async (req, res, next) => {
     try {
-        const abbreviations = await Abbreviation.find({})
-            .sort({ abbreviation: 1 })
-            .select('abbreviation fullForm -_id')
-            .lean();
-
+        const abbreviations = await AbbreviationRepository.exportAll();
         response.success(res, abbreviations);
     } catch (error) {
         next(error);

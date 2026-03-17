@@ -1,179 +1,167 @@
 /**
  * Recovery Controller
  * 
- * Handles password recovery via security questions.
+ * Handles user password recovery via security questions.
  * 
  * @module controllers/recovery.controller
  */
 
-const User = require('../models/User');
-const { hashSecurityAnswers, verifySecurityAnswers, AVAILABLE_QUESTIONS } = require('../services/securityQuestion.service');
-const { generateOtp, generateLoginToken, saveOtp, shouldSkipSend } = require('../services/otp.service');
-const { sendOtpSms } = require('../services/sms.service');
+const { UserRepository } = require('../repositories');
+const { generateLifetimeUserToken } = require('../services/jwt.service');
+const { createSession, SESSION_TYPES } = require('../services/session.service');
+const { verifySecurityAnswers, hashSecurityAnswers } = require('../services/securityQuestion.service');
 const response = require('../utils/response');
 const { sanitizePhone } = require('../utils/sanitize');
+const { server } = require('../config/environment');
 
 /**
- * Get available security questions.
- */
-const getQuestions = async (req, res, next) => {
-    try {
-        response.success(res, { questions: AVAILABLE_QUESTIONS });
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
- * Setup security questions for current user.
- * User must be authenticated via OTP first.
- * Required for users created by admin (isVerified = false).
+ * Set up security questions for a user.
+ * Can only be done once (when user has no security questions set).
  */
 const setupSecurityQuestions = async (req, res, next) => {
     try {
+        const userId = req.user?.userId;
         const { securityQuestions } = req.body;
 
-        if (!Array.isArray(securityQuestions) || securityQuestions.length < 3) {
-            return response.badRequest(res, 'At least 3 security questions are required');
+        if (!userId) return response.unauthorized(res, 'Authentication required');
+
+        const user = await UserRepository.findById(userId);
+        
+        if (!user) return response.notFound(res, 'User not found');
+        
+        const existingQuestions = user.securityQuestions || user.security_questions || [];
+        if (existingQuestions.length > 0) {
+            return response.badRequest(res, 'Security questions already set');
+        }
+        
+        if (!Array.isArray(securityQuestions) || securityQuestions.length < 2) {
+            return response.badRequest(res, 'At least 2 security questions required');
         }
 
-        if (securityQuestions.length > 5) {
-            return response.badRequest(res, 'Maximum 5 security questions allowed');
-        }
-
-        // Validate all questions have both fields
-        for (const qa of securityQuestions) {
-            if (!qa.question || !qa.answer) {
+        // Validate each question has required fields
+        for (const sq of securityQuestions) {
+            if (!sq.question || !sq.answer) {
                 return response.badRequest(res, 'Each security question must have a question and answer');
             }
-            if (qa.answer.trim().length < 2) {
-                return response.badRequest(res, 'Each answer must be at least 2 characters');
-            }
         }
 
-        const user = await User.findById(req.user.userId);
-        if (!user) {
-            return response.notFound(res, 'User not found');
-        }
-
-        // Hash all answers
         const hashedQuestions = await hashSecurityAnswers(securityQuestions);
-
-        // Update user
-        user.securityQuestions = hashedQuestions;
-        user.isVerified = true;
-        await user.save();
-
-        response.success(res, {
-            message: 'Security questions set successfully',
-            isVerified: true
+        await UserRepository.updateById(userId, { 
+            securityQuestions: JSON.stringify(hashedQuestions), 
+            isVerified: true 
         });
+
+        response.success(res, null, 'Security questions set successfully');
     } catch (error) {
         next(error);
     }
 };
 
 /**
- * Initiate password recovery.
- * Returns the user's security questions (without answers).
+ * Initiate account recovery by verifying phone number.
  */
 const initiateRecovery = async (req, res, next) => {
     try {
-        const phone_number = sanitizePhone(req.body.phone_number);
+        const phoneNumber = sanitizePhone(req.body.phone_number);
 
-        if (!phone_number) {
-            return response.badRequest(res, 'Phone number is required');
-        }
-
-        const user = await User.findOne({ phone_number });
-
+        const user = await UserRepository.findByPhone(phoneNumber);
         if (!user) {
-            // Don't reveal if user exists
-            return response.badRequest(res, 'Unable to initiate recovery for this phone number');
+            return response.notFound(res, 'No account found with this phone number');
         }
 
-        if (!user.securityQuestions || user.securityQuestions.length === 0) {
+        const userQuestions = user.securityQuestions || user.security_questions || [];
+        if (!userQuestions.length) {
             return response.badRequest(res, 'No security questions set for this account');
         }
 
-        // Return only the questions (not answers)
-        const questions = user.securityQuestions.map(q => q.question);
+        // Parse if stored as string
+        const questions = typeof userQuestions === 'string' ? JSON.parse(userQuestions) : userQuestions;
+
+        // Return questions without answers
+        const questionsOnly = questions.map(sq => ({
+            question: sq.question
+        }));
 
         response.success(res, {
-            questions,
-            message: 'Please answer your security questions'
-        });
+            phone_number: phoneNumber,
+            securityQuestions: questionsOnly
+        }, 'Please answer your security questions');
     } catch (error) {
         next(error);
     }
 };
 
 /**
- * Verify security question answers.
- * If correct, sends OTP to the user's phone.
+ * Verify security answers and issue a new session token.
  */
-const verifyRecoveryAnswers = async (req, res, next) => {
+const verifyRecovery = async (req, res, next) => {
     try {
-        const phone_number = sanitizePhone(req.body.phone_number);
+        const phoneNumber = sanitizePhone(req.body.phone_number);
         const { answers, deviceId } = req.body;
 
-        if (!phone_number || !answers || !Array.isArray(answers)) {
-            return response.badRequest(res, 'Phone number and answers are required');
+        if (!answers || !Array.isArray(answers)) {
+            return response.badRequest(res, 'Answers are required');
         }
 
         if (!deviceId) {
             return response.badRequest(res, 'Device ID is required');
         }
 
-        const user = await User.findOne({ phone_number });
-
+        const user = await UserRepository.findByPhone(phoneNumber);
         if (!user) {
-            return response.badRequest(res, 'Invalid phone number');
+            return response.notFound(res, 'User not found');
         }
 
-        if (!user.securityQuestions || user.securityQuestions.length === 0) {
-            return response.badRequest(res, 'No security questions set');
+        const userQuestions = user.securityQuestions || user.security_questions || [];
+        const questions = typeof userQuestions === 'string' ? JSON.parse(userQuestions) : userQuestions;
+
+        const isValid = await verifySecurityAnswers(questions, answers);
+        if (!isValid) {
+            return response.unauthorized(res, 'Incorrect security answers');
         }
 
-        // Verify answers
-        const verification = await verifySecurityAnswers(answers, user.securityQuestions);
+        // Update device
+        await UserRepository.updateById(user._id, { deviceId });
 
-        if (!verification.valid) {
-            return response.badRequest(res, verification.error || 'Security answers are incorrect');
-        }
-
-        // Answers correct - generate and send OTP for device binding
-        const loginToken = generateLoginToken();
-        const otp = generateOtp();
-        await saveOtp(phone_number, otp, loginToken, deviceId.trim());
-
-        // Send OTP via SMS
-        sendOtpSms(phone_number, otp).catch(err => {
-            console.error(`[SMS Error] Recovery OTP failed for ${phone_number}:`, err.message);
+        const tokenVersion = user.tokenVersion || user.token_version || 0;
+        const { sid } = await createSession({
+            type: SESSION_TYPES.USER,
+            accountId: user._id,
+            tokenVersion
         });
 
-        const isDevMode = shouldSkipSend();
-
-        const responseData = {
-            message: isDevMode
-                ? 'Security answers verified. OTP generated (DEV MODE)'
-                : 'Security answers verified. OTP sent to your phone',
-            loginToken
+        const tokenPayload = {
+            sid,
+            deviceId,
+            phone_number: user.phone_number,
+            name: user.name,
+            tokenVersion
         };
 
-        if (isDevMode) {
-            responseData.otp = otp;
-        }
+        const token = generateLifetimeUserToken(user._id, tokenPayload);
 
-        response.success(res, responseData);
+        const isTesting = server.isTesting;
+        const oneHundredYearsMs = 100 * 365 * 24 * 60 * 60 * 1000;
+
+        res.cookie('auth_token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production' || isTesting,
+            sameSite: isTesting ? 'none' : 'lax',
+            maxAge: oneHundredYearsMs,
+            path: '/'
+        });
+
+        response.success(res, {
+            user: UserRepository.toSafeObject(user),
+            token
+        }, 'Account recovered successfully');
     } catch (error) {
         next(error);
     }
 };
 
 module.exports = {
-    getQuestions,
     setupSecurityQuestions,
     initiateRecovery,
-    verifyRecoveryAnswers
+    verifyRecovery
 };
