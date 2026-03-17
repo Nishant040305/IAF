@@ -27,8 +27,8 @@ class AuditLogRepository {
             admin_name: data.adminName || 'Unknown',
             admin_contact: data.adminContact || 'Unknown',
             details: typeof data.details === 'string' ? data.details : JSON.stringify(data.details || {}),
-            timestamp: new Date().toISOString(),
-            created_at: new Date().toISOString()
+            timestamp: this._toCHDateTime(new Date()),
+            created_at: this._toCHDateTime(new Date())
         };
 
         await this.client.insert({
@@ -160,15 +160,15 @@ class AuditLogRepository {
         if (filter.timestamp) {
             if (filter.timestamp.$gte) {
                 conditions.push(`timestamp >= {tsGte:String}`);
-                params.tsGte = new Date(filter.timestamp.$gte).toISOString();
+                params.tsGte = this._toCHDateTime(filter.timestamp.$gte);
             }
             if (filter.timestamp.$lte) {
                 conditions.push(`timestamp <= {tsLte:String}`);
-                params.tsLte = new Date(filter.timestamp.$lte).toISOString();
+                params.tsLte = this._toCHDateTime(filter.timestamp.$lte);
             }
             if (filter.timestamp.$lt) {
                 conditions.push(`timestamp < {tsLt:String}`);
-                params.tsLt = new Date(filter.timestamp.$lt).toISOString();
+                params.tsLt = this._toCHDateTime(filter.timestamp.$lt);
             }
         }
 
@@ -189,6 +189,11 @@ class AuditLogRepository {
             timestamp: row.timestamp,
             createdAt: row.created_at
         };
+    }
+
+    _toCHDateTime(value) {
+        const d = value instanceof Date ? value : new Date(value);
+        return d.toISOString().replace('T', ' ').replace('Z', '');
     }
 }
 
