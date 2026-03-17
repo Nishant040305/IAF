@@ -36,7 +36,9 @@ const connectClickHouse = async (config) => {
         request_timeout: 30000,
         clickhouse_settings: {
             async_insert: 1,
-            wait_for_async_insert: 0
+            wait_for_async_insert: 0,
+            // Accept ISO-8601 timestamps (e.g. 2026-03-17T07:44:12.233Z)
+            date_time_input_format: 'best_effort'
         }
     });
 

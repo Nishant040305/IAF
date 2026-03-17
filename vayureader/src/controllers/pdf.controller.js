@@ -432,7 +432,6 @@ const updatePdf = async (req, res, next) => {
                 })
                 .catch(() => { });
         }
-
         await logUpdate(RESOURCE_TYPES.PDF, updated._id, req.admin, {
             old: { title: oldDoc.title },
             new: { title: updated.title }
