@@ -10,4 +10,4 @@ export const ABBR_BASE_URL = env.EXPO_PUBLIC_ABBR_BASE_URL || backendUrl;
  * on API requests and responses. Useful for debugging with plain JSON.
  * Set via EXPO_PUBLIC_SECURITY_BYPASS=true in .env or app config.
  */
-export const SECURITY_BYPASS = (env.EXPO_PUBLIC_SECURITY_BYPASS || 'true');
+export const SECURITY_BYPASS = (env.EXPO_PUBLIC_SECURITY_BYPASS || 'true') === 'true';

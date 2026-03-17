@@ -1,5 +1,8 @@
 services:
 
+  # ============================================================================
+  # ADMIN DASHBOARD
+  # ============================================================================
   admin-dashboard:
     image: vayureader-admin-dashboard:latest
     container_name: vayureader_admin
@@ -9,50 +12,36 @@ services:
     networks:
       - backend-network
 
-  mongo:
-    image: mongo:6-jammy
-    container_name: vayureader_db
-    restart: unless-stopped
-    volumes:
-      - mongo-data:/data/db
-    networks:
-      - backend-network
-
-  redis:
-    image: redis:7.2-alpine
-    container_name: vayureader_cache
-    restart: unless-stopped
-    networks:
-      - backend-network
-
-  elasticsearch:
-    image: elasticsearch:8.11.0
-    container_name: vayureader_search
-    restart: unless-stopped
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms256m -Xmx256m
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    networks:
-      - backend-network
-
+  # ============================================================================
+  # APP SERVICE (Node.js Backend)
+  # ============================================================================
   app:
     image: vayureader-app:latest
     container_name: vayureader_api
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_started
     env_file:
       - .env
     volumes:
       - ./uploads:/usr/src/app/uploads
-    depends_on:
-      - mongo
-      - redis
-      - elasticsearch
     networks:
       - backend-network
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
+  # ============================================================================
+  # NGINX (Reverse Proxy & Gateway)
+  # ============================================================================
   nginx:
     image: nginx:1.25-alpine
     container_name: vayureader_gateway
@@ -66,14 +55,100 @@ services:
       - ./nginx/certs:/etc/nginx/certs:ro
       - ./uploads:/usr/src/app/uploads:ro
     depends_on:
-      - app
+      app:
+        condition: service_healthy
+      admin-dashboard:
+        condition: service_started
     networks:
       - backend-network
 
+  # ============================================================================
+  # POSTGRESQL (General Data)
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: vayureader_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vayureader
+      POSTGRES_USER: vayureader
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./src/db/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql:ro
+    networks:
+      - backend-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U vayureader -d vayureader" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ============================================================================
+  # CLICKHOUSE (Log Analytics)
+  # ============================================================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: vayureader_logs
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: vayureader_logs
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    networks:
+      - backend-network
+    healthcheck:
+      test: [ "CMD-SHELL", "clickhouse-client --query 'SELECT 1'" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ============================================================================
+  # REDIS
+  # ============================================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: vayureader_cache
+    restart: unless-stopped
+    networks:
+      - backend-network
+
+  # ============================================================================
+  # ELASTICSEARCH (Search Engine)
+  # ============================================================================
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    container_name: vayureader_search
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks:
+      - backend-network
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# ==============================================================================
+# NETWORKS & VOLUMES
+# ==============================================================================
 networks:
   backend-network:
     driver: bridge
 
 volumes:
-  mongo-data:
+  postgres-data:
+  clickhouse-data:
+  clickhouse-logs:
   es-data:
