@@ -64,7 +64,7 @@ router.post(
     otpLimiter,
     trimFields,
     requireFields(['phone_number', 'answers', 'deviceId']),
-    recoveryController.verifyRecoveryAnswers
+    recoveryController.verifyRecovery
 );
 
 module.exports = router;

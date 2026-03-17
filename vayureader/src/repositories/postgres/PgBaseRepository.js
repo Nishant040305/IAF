@@ -165,7 +165,11 @@ class PgBaseRepository extends BaseRepository {
      */
     buildSelect(selectFields) {
         if (!selectFields || selectFields.length === 0) return '*';
-        return selectFields.map(f => this.toColumn(f)).join(', ');
+        const fields = new Set(selectFields);
+        if (!fields.has('_id') && !fields.has('id')) {
+            fields.add('_id');
+        }
+        return Array.from(fields).map(f => this.toColumn(f)).join(', ');
     }
 
     /**

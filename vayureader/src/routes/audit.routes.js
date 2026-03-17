@@ -28,7 +28,7 @@ router.get(
     '/logs',
     authenticateAdmin,
     requirePermission('view_audit'),
-    auditController.getLogs
+    auditController.getAuditLogs
 );
 
 /**
@@ -39,7 +39,7 @@ router.get(
     '/stats',
     authenticateAdmin,
     requirePermission('view_audit'),
-    auditController.getStats
+    auditController.getAuditStats
 );
 
 module.exports = router;

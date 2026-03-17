@@ -9,10 +9,21 @@
 const { UserRepository } = require('../repositories');
 const { generateLifetimeUserToken } = require('../services/jwt.service');
 const { createSession, SESSION_TYPES } = require('../services/session.service');
-const { verifySecurityAnswers, hashSecurityAnswers } = require('../services/securityQuestion.service');
+const { verifySecurityAnswers, hashSecurityAnswers, AVAILABLE_QUESTIONS } = require('../services/securityQuestion.service');
 const response = require('../utils/response');
 const { sanitizePhone } = require('../utils/sanitize');
 const { server } = require('../config/environment');
+
+/**
+ * Get available security questions.
+ */
+const getQuestions = async (req, res, next) => {
+    try {
+        response.success(res, { questions: AVAILABLE_QUESTIONS });
+    } catch (error) {
+        next(error);
+    }
+};
 
 /**
  * Set up security questions for a user.
@@ -26,14 +37,14 @@ const setupSecurityQuestions = async (req, res, next) => {
         if (!userId) return response.unauthorized(res, 'Authentication required');
 
         const user = await UserRepository.findById(userId);
-        
+
         if (!user) return response.notFound(res, 'User not found');
-        
+
         const existingQuestions = user.securityQuestions || user.security_questions || [];
         if (existingQuestions.length > 0) {
             return response.badRequest(res, 'Security questions already set');
         }
-        
+
         if (!Array.isArray(securityQuestions) || securityQuestions.length < 2) {
             return response.badRequest(res, 'At least 2 security questions required');
         }
@@ -46,9 +57,9 @@ const setupSecurityQuestions = async (req, res, next) => {
         }
 
         const hashedQuestions = await hashSecurityAnswers(securityQuestions);
-        await UserRepository.updateById(userId, { 
-            securityQuestions: JSON.stringify(hashedQuestions), 
-            isVerified: true 
+        await UserRepository.updateById(userId, {
+            securityQuestions: JSON.stringify(hashedQuestions),
+            isVerified: true
         });
 
         response.success(res, null, 'Security questions set successfully');
@@ -163,5 +174,6 @@ const verifyRecovery = async (req, res, next) => {
 module.exports = {
     setupSecurityQuestions,
     initiateRecovery,
+    getQuestions,
     verifyRecovery
 };

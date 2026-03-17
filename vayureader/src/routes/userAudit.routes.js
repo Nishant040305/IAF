@@ -29,7 +29,7 @@ router.get(
     '/logs',
     authenticateAdmin,
     requirePermission('view_user_audit'),
-    userAuditController.getLogs
+    userAuditController.getUserAuditLogs
 );
 
 /**
@@ -40,7 +40,7 @@ router.get(
     '/stats',
     authenticateAdmin,
     requirePermission('view_user_audit'),
-    userAuditController.getStats
+    userAuditController.getUserAuditStats
 );
 
 /**
@@ -52,7 +52,7 @@ router.get(
     authenticateAdmin,
     requirePermission('view_user_audit'),
     validateObjectId('userId'),
-    userAuditController.getUserLogs
+    userAuditController.getUserAuditLogsById
 );
 
 module.exports = router;

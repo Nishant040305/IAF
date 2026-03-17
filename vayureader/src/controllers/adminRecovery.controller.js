@@ -1,16 +1,18 @@
 /**
  * Admin Recovery Controller
  * 
- * Handles admin account recovery via security questions.
+ * Handles password recovery via security questions for admins.
  * 
  * @module controllers/adminRecovery.controller
  */
 
 const { AdminRepository } = require('../repositories');
+const { hashSecurityAnswers, verifySecurityAnswers, AVAILABLE_QUESTIONS } = require('../services/securityQuestion.service');
+const { generateOtp, generateLoginToken, saveOtp, shouldSkipSend, verifyOtp } = require('../services/otp.service');
+const { sendOtpSms } = require('../services/sms.service');
+const { hashPassword } = require('../services/password.service');
 const { generateAdminToken } = require('../services/jwt.service');
-const { hashPassword, comparePassword } = require('../services/password.service');
-const { verifySecurityAnswers, hashSecurityAnswers } = require('../services/securityQuestion.service');
-const { createSession, SESSION_TYPES } = require('../services/session.service');
+const { createSession, revokeAllSessions, SESSION_TYPES } = require('../services/session.service');
 const { validateDpopPublicJwk } = require('../services/dpop.service');
 const { logUpdate, RESOURCE_TYPES } = require('../services/audit.service');
 const response = require('../utils/response');
@@ -18,98 +20,180 @@ const { sanitizePhone } = require('../utils/sanitize');
 const { server, dpop: dpopConfig } = require('../config/environment');
 
 /**
- * Set up security questions for an admin.
- * Requires authentication (admin must be logged in).
- * Marks admin as verified after setup.
+ * Get available security questions.
+ */
+const getQuestions = async (req, res, next) => {
+    try {
+        response.success(res, { questions: AVAILABLE_QUESTIONS });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Setup security questions for current admin.
+ * Admin must be authenticated via OTP first.
+ * Required for admins with isVerified = false.
  */
 const setupSecurityQuestions = async (req, res, next) => {
     try {
         const adminId = req.admin?.adminId;
         const { securityQuestions } = req.body;
 
-        if (!adminId) return response.unauthorized(res, 'Authentication required');
+        if (!adminId) return response.unauthorized(res, 'Authentication required 1');
 
-        const admin = await AdminRepository.findById(adminId);
-        if (!admin) return response.notFound(res, 'Admin not found');
-
-        const existingQuestions = admin.securityQuestions || admin.security_questions || [];
-        if (existingQuestions.length > 0) {
-            return response.badRequest(res, 'Security questions already set. Use recovery to change them.');
+        if (!Array.isArray(securityQuestions) || securityQuestions.length < 3) {
+            return response.badRequest(res, 'At least 3 security questions are required');
         }
 
-        if (!Array.isArray(securityQuestions) || securityQuestions.length < 2) {
-            return response.badRequest(res, 'At least 2 security questions required');
+        if (securityQuestions.length > 5) {
+            return response.badRequest(res, 'Maximum 5 security questions allowed');
         }
 
-        for (const sq of securityQuestions) {
-            if (!sq.question || !sq.answer) {
+        for (const qa of securityQuestions) {
+            if (!qa.question || !qa.answer) {
                 return response.badRequest(res, 'Each security question must have a question and answer');
+            }
+            if (qa.answer.trim().length < 2) {
+                return response.badRequest(res, 'Each answer must be at least 2 characters');
             }
         }
 
+        const admin = await AdminRepository.findById(adminId);
+        if (!admin) {
+            return response.notFound(res, 'Admin not found');
+        }
+
         const hashedQuestions = await hashSecurityAnswers(securityQuestions);
-        await AdminRepository.updateById(adminId, { 
-            securityQuestions: JSON.stringify(hashedQuestions), 
-            isVerified: true 
+
+        await AdminRepository.updateById(adminId, {
+            securityQuestions: JSON.stringify(hashedQuestions),
+            isVerified: true
         });
 
         await logUpdate(RESOURCE_TYPES.ADMIN, adminId, req.admin, {
-            action: 'SECURITY_SETUP',
-            questionCount: securityQuestions.length
+            message: 'Security questions set/updated'
         });
 
-        response.success(res, null, 'Security questions set successfully. Admin verified.');
+        response.success(res, {
+            message: 'Security questions set successfully',
+            isVerified: true
+        });
     } catch (error) {
         next(error);
     }
 };
 
 /**
- * Initiate admin recovery - return security questions.
+ * Initiate password recovery.
+ * Returns the admin's security questions (without answers).
  */
 const initiateRecovery = async (req, res, next) => {
     try {
         const contact = sanitizePhone(req.body.contact);
 
+        if (!contact) {
+            return response.badRequest(res, 'Contact number is required');
+        }
+
         const admin = await AdminRepository.findByContact(contact);
+
         if (!admin) {
-            return response.notFound(res, 'No admin account found with this contact');
+            // Don't reveal if admin exists
+            return response.badRequest(res, 'Unable to initiate recovery for this contact');
         }
 
         const adminQuestions = admin.securityQuestions || admin.security_questions || [];
         const questions = typeof adminQuestions === 'string' ? JSON.parse(adminQuestions) : adminQuestions;
 
         if (!questions.length) {
-            return response.badRequest(res, 'No security questions set for this account. Contact super admin.');
+            return response.badRequest(res, 'No security questions set for this account. Contact an admin.');
         }
 
-        const questionsOnly = questions.map(sq => ({
-            question: sq.question
-        }));
+        const questionsOnly = questions.map(q => q.question);
 
         response.success(res, {
-            contact,
-            securityQuestions: questionsOnly
-        }, 'Please answer your security questions');
+            questions: questionsOnly,
+            message: 'Please answer your security questions'
+        });
     } catch (error) {
         next(error);
     }
 };
 
 /**
- * Verify security answers and allow password reset.
+ * Verify security question answers.
+ * If correct, sends OTP to the admin's contact.
  */
-const verifyRecovery = async (req, res, next) => {
+const verifyRecoveryAnswers = async (req, res, next) => {
     try {
         const contact = sanitizePhone(req.body.contact);
-        const { answers, newPassword, dpopPublicKey } = req.body;
+        const { answers } = req.body;
 
-        if (!answers || !Array.isArray(answers)) {
-            return response.badRequest(res, 'Answers are required');
+        if (!contact || !answers || !Array.isArray(answers)) {
+            return response.badRequest(res, 'Contact and answers are required');
         }
 
-        if (!newPassword || newPassword.length < 8) {
-            return response.badRequest(res, 'New password must be at least 8 characters');
+        const admin = await AdminRepository.findByContact(contact);
+        if (!admin) {
+            return response.badRequest(res, 'Invalid contact');
+        }
+
+        const adminQuestions = admin.securityQuestions || admin.security_questions || [];
+        const questions = typeof adminQuestions === 'string' ? JSON.parse(adminQuestions) : adminQuestions;
+
+        if (!questions.length) {
+            return response.badRequest(res, 'No security questions set');
+        }
+
+        const verification = await verifySecurityAnswers(answers, questions);
+
+        if (!verification.valid) {
+            return response.badRequest(res, verification.error || 'Security answers are incorrect');
+        }
+
+        const loginToken = generateLoginToken();
+        const otp = generateOtp();
+
+        await saveOtp(contact, otp, loginToken, `recovery-${contact}`);
+
+        sendOtpSms(contact, otp).catch(err => {
+            console.error(`[SMS Error] Admin recovery OTP failed for ${contact}:`, err.message);
+        });
+
+        const isDevMode = shouldSkipSend();
+
+        const responseData = {
+            message: isDevMode
+                ? 'Security answers verified. OTP generated (DEV MODE)'
+                : 'Security answers verified. OTP sent to your phone',
+            loginToken
+        };
+
+        if (isDevMode) {
+            responseData.otp = otp;
+        }
+
+        response.success(res, responseData);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Step 3: Verify OTP and Reset Password.
+ */
+const resetPassword = async (req, res, next) => {
+    try {
+        const contact = sanitizePhone(req.body.contact);
+        const { otp, loginToken, newPassword, dpopPublicKey } = req.body;
+
+        if (!contact || !otp || !loginToken || !newPassword) {
+            return response.badRequest(res, 'All fields are required');
+        }
+
+        if (newPassword.length < 8) {
+            return response.badRequest(res, 'Password must be at least 8 characters long');
         }
 
         if (newPassword.length > 100) {
@@ -127,26 +211,38 @@ const verifyRecovery = async (req, res, next) => {
 
         const admin = await AdminRepository.findByContact(contact);
         if (!admin) {
-            return response.notFound(res, 'Admin not found');
+            return response.badRequest(res, 'Invalid contact');
         }
 
-        const adminQuestions = admin.securityQuestions || admin.security_questions || [];
-        const questions = typeof adminQuestions === 'string' ? JSON.parse(adminQuestions) : adminQuestions;
+        const verification = await verifyOtp(otp, contact, loginToken, `recovery-${contact}`);
 
-        const isValid = await verifySecurityAnswers(questions, answers);
-        if (!isValid) {
-            return response.unauthorized(res, 'Incorrect security answers');
+        if (!verification.valid) {
+            return response.badRequest(res, verification.error || 'Invalid or expired OTP');
         }
 
-        // Reset password
-        const passwordHash = await hashPassword(newPassword);
-        await AdminRepository.updateById(admin._id, { passwordHash });
+        const newTokenVersion = (admin.tokenVersion || admin.token_version || 0) + 1;
 
-        const tokenVersion = admin.tokenVersion || admin.token_version || 0;
+        await AdminRepository.updateById(admin._id, {
+            passwordHash: await hashPassword(newPassword),
+            tokenVersion: newTokenVersion,
+            isVerified: true
+        });
+
+        await logUpdate(RESOURCE_TYPES.ADMIN, admin._id,
+            { id: admin._id, name: admin.name, contact: admin.contact },
+            { message: 'Password reset via account recovery' }
+        );
+
+        try {
+            await revokeAllSessions(SESSION_TYPES.ADMIN, admin._id);
+        } catch (sessionError) {
+            console.warn('Failed to revoke admin sessions during recovery reset:', sessionError.message);
+        }
+
         const { sid } = await createSession({
             type: SESSION_TYPES.ADMIN,
             accountId: admin._id,
-            tokenVersion
+            tokenVersion: newTokenVersion
         });
 
         const tokenPayload = { sid };
@@ -165,63 +261,20 @@ const verifyRecovery = async (req, res, next) => {
             path: '/'
         });
 
-        await logUpdate(RESOURCE_TYPES.ADMIN, admin._id, { _id: admin._id, name: admin.name, contact: admin.contact }, {
-            action: 'PASSWORD_RESET_VIA_RECOVERY'
-        });
-
         response.success(res, {
             admin: AdminRepository.toSafeObject(admin),
-            token
-        }, 'Password reset successfully');
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
- * Change password while authenticated.
- */
-const changePassword = async (req, res, next) => {
-    try {
-        const adminId = req.admin?.adminId;
-        const { currentPassword, newPassword } = req.body;
-
-        if (!currentPassword || !newPassword) {
-            return response.badRequest(res, 'Current and new password required');
-        }
-
-        if (newPassword.length < 8) {
-            return response.badRequest(res, 'New password must be at least 8 characters');
-        }
-
-        if (newPassword.length > 100) {
-            return response.badRequest(res, 'Password must be at most 100 characters long');
-        }
-
-        const admin = await AdminRepository.findById(adminId);
-        if (!admin) return response.notFound(res, 'Admin not found');
-
-        const isValid = await comparePassword(currentPassword, admin.passwordHash || admin.password_hash);
-        if (!isValid) {
-            return response.unauthorized(res, 'Current password is incorrect');
-        }
-
-        const passwordHash = await hashPassword(newPassword);
-        await AdminRepository.updateById(adminId, { passwordHash });
-
-        await logUpdate(RESOURCE_TYPES.ADMIN, adminId, req.admin, {
-            action: 'PASSWORD_CHANGE'
+            token,
+            message: 'Password reset successful'
         });
-
-        response.success(res, null, 'Password changed successfully');
     } catch (error) {
         next(error);
     }
 };
 
 module.exports = {
+    getQuestions,
     setupSecurityQuestions,
     initiateRecovery,
-    verifyRecovery,
-    changePassword
+    verifyRecoveryAnswers,
+    resetPassword
 };
