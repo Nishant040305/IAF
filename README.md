@@ -1,77 +1,162 @@
-# VayuReader Project
+# VayuReader
 
-This project is a comprehensive platform for secure PDF management, content discovery, and administration. It consists of a robust backend, web-based admin dashboard, and a mobile application.
-It aims to provide protection from every sort of attack and with scalability there are two branch which we would focus on 
+VayuReader is a scalable platform for secure PDF management, content delivery, and administrative control. It is designed to handle both high-performance workloads and security-critical environments through a configurable architecture.
 
-1. Deployment Branch : Suppose to provide the best facility to make user experience better and and provide ms of latency with high throuput.
-2. Encrypted Branch: Suppose to provide security in a sense it compromises the performance to provide the security assuming constant threats on the application
-   and with it being most valuable information on the site.
+The project includes a backend system, web-based admin dashboard, and a mobile application. It focuses on balancing latency, throughput, and data protection depending on deployment requirements.
 
-Q: Why to seperate them?
+---
 
-A: With miliseconds of performance with minimilistic resources its practically everything lands to High Network latency and small case systems
-   along with nodejs server which is not that scalable at all. Not when you need protection from MITM and in flight tampering of request.
+## Overview
 
-Q: Why to choose nodejs
+VayuReader has evolved from a branch-based architecture into a configuration-driven system. Earlier implementations separated performance and security concerns into different branches. This approach has now been replaced with a unified system where features can be selectively enabled or disabled.
 
-A: No body should in case you plan to server such a large network with few resource its not scalable because of single thread and un typed system, but since the original code was written in nodejs
-   even after considering bad option. The best development speed is always offered by nodejs
+---
 
-Q: What branch I should use?
+## Version History
 
-A: Depends on your usecase suggestion for any normal user you can go for deployment branch as this branch will have more updates and optimization to save your deployment cost and memory usage along with cpu
-   utilisation, but for security as a main issue you can go with Encrypted branch.
+### 1.1.0 (Encrypted Implementation)
 
-Q: Should we use the original code since its a fork?
+Version 1.1.0 represents the fully security-focused implementation of the platform.
 
-A: Yes, Its a fork but of a dead code base with -ve sense architecture with -7 scalability and reliablity as the complete frontend - backend is rewritten, only apk is not modified as its UI is loved by many though I
-   dont like it at all whole design is very poor but thats the only part where only small tweeks were done
+Key characteristics:
 
-Q: Can you contribute?
+* End-to-End Encryption using AES-GCM with session-based key generation
+* Request-level signing to prevent replay attacks and in-flight tampering
+* Strict validation of incoming data before persistence
+* PDF file inspection including MIME checks and hash verification
+* Frontend parsing of structured inputs (JSON/CSV) into sanitized payloads
+* Backend verification to ensure no malicious content is stored
+* MongoDB as the primary database and elasticsearch for words and abbreviation search
+* Reduced reliance on caching due to encryption overhead
 
-A: Thats why its public but improving backend would be admired , UI have some practical flaw and have lazy implementation if you are intreasted to add u can do that too. like allowing user with no authority in admin-dashboard
-   must be able to see pdfs , Dictionary and Abbreviation. These things are supposed to be public and UI just does not but it does not mean he should'nt see they are suppose to see but due to lazy coding it is as it is so would always
-   appriciate open source contribution.
-   
-Encrypted Branch: What makes it special.
+Trade-offs:
 
-1. E2E encryption: AES-GSM encryption with session based key generation.
-2. E2E signature: Since its not practical to encrypt pdf files as that would cost too much cpu resource making complete application slow, solution is to use a one time signature which can be used so that
-   Replay attack and mid flight File tampering can be defended
-3. Note: Only PDF upload is supported and for some reference the json upload and csv upload are not actually csv and json upload , The input is parsed on the frontend with filters to detect any kind of Injection or scrip itself and converted into     a json payload Not a file then that is converted into string stream and then encrypted with Encryption Key then that was sent and then decrypted at Backend then verify the text does not contain any malicious code then it was saved in mongodb       which already does not support xlxs formula support.
-4. PDF file stream is also parsed to verify that it does not contain any script along with mime type checks and SHA hash verification.
+* Increased CPU usage due to encryption and validation
+* Higher latency compared to non-encrypted deployments
+* Limited scalability under heavy workloads without additional optimization
 
-Deployment Branch: What makes this special
+This version is suitable for environments where data security is the primary concern.
 
-1. It realy on TLS of https only hence a Defihelman attack is possible and a intermidate proxy can be setup which adding self signed certificates in the client OS certificate collection
-2. What ensures server response to correct users and authority. Does not guarentee the UI tweeks as changing the live variable is always possible using dev tools.
-3. It consider the validity of token upto its expiry so as it aims for longer use of application by customer
-4. It utilises caching very well as since there is no encryption nginx can serve pages cache and cache hit does not need to go cycle of encryption.
-5. It aims to provide speed over all the short commings. Made for mass user base (not admin)
-6. Future Addition , use of OLAP db for analytics like Clickhouse; batching actions; CDN configurations for faster delivery; hot key handle for scale write and read replica; and postgres as main server
+---
 
-How to proceed:
+### 2.0.0 (Configurable Architecture and Performance Improvements)
 
-check the [book](https://github.com/Nishant040305/vayureader/tree/Encrypted/vayureader/docs/pdf_output)
+Version 2.0.0 introduces a major architectural upgrade focused on flexibility, performance, and extensibility.
 
-for short [guide](https://github.com/Nishant040305/vayureader/blob/Encrypted/vayureader/docs/setup.md)
+Key improvements:
 
-some document updates required to be done as it includes the latest changes and commits and change in the plan a new documentation style would be opted.
+* Configuration-based feature control:
 
-currently the information that the docs is supposed to include can be refered from this README.md file
+  * End-to-End Encryption (enable/disable)
+  * DPoP (enable/disable)
+  * Request signatures (enable/disable)
 
-you can refer to vayureader/docs/output/book.pdf book contains all the information about the project
+* Database enhancements:
 
-Current Versions:
-1. Nginx: 1.25-alpine
-2. redis: 7.2-alpine
-3. mongo: 6-jammy
-4. elasticsearch: 8.11.0
-5. node: 20-alpine
-6. react: ^19.0.1
-7. react-native: 0.79.3
-8. expo: ~53.0.10
-   
-rest of library info can be verified from the package.json file of backend and frontend and admin dashboard
+  * Support for PostgreSQL as a primary relational database
+  * Integration capability with ClickHouse for analytics (OLAP workloads)
+  * More scalable data handling compared to MongoDB-only design
 
-Any issues are very welcome I would love hear(or resolve) about them and that would be a great learning thank you.
+* Secure and optimized PDF access:
+
+  * Signature-based access control for PDF resources
+  * Expiration-based (time-bound) PDF access
+  * Reduced need for repeated validation cycles
+  * Significant improvement in response time for protected content delivery
+
+* Performance optimizations:
+
+  * Reduced latency (approximately half compared to 1.1.0 in secure mode)
+  * Better utilization of caching when encryption is disabled
+  * Improved request handling and throughput
+
+* Improved system design:
+
+  * Transition from branch-based to feature-flag/config-driven architecture
+  * Easier deployment customization based on use case
+  * Foundation for future scalability features such as batching, CDN integration, and read replicas
+
+Trade-offs:
+
+* Security guarantees depend on configuration
+* Additional complexity in managing feature combinations
+
+This version is recommended for most deployments as it provides a balance between performance and security while introducing significant architectural improvements.
+
+---
+
+## Architecture
+
+The system consists of:
+
+* Backend service handling API, validation, and security layers
+* Reverse proxy using Nginx for routing and caching
+* Redis for caching and session management
+* PostgreSQL for primary data storage
+* ClickHouse for analytics workloads
+* Elasticsearch for search capabilities
+* React-based admin dashboard
+* React Native mobile application
+
+---
+
+## Security Model
+
+Depending on configuration, VayuReader provides:
+
+* End-to-End encrypted communication
+* Request signing for integrity and replay protection
+* Signature-based and expiration-based access control for PDFs
+* Payload validation and sanitization
+* Secure file handling and verification
+
+Important notes:
+
+* Frontend validation is not a security boundary
+* All critical validation is enforced at the backend
+* TLS-only deployments rely on standard HTTPS guarantees and are less secure than E2E mode
+
+---
+
+## Performance Model
+
+When security features are minimized:
+
+* Nginx caching improves response time
+* Reduced CPU overhead increases throughput
+* Signature + expiration-based access reduces repeated processing
+* Suitable for large-scale public deployments
+
+---
+
+## Setup
+
+```bash
+git clone https://github.com/Nishant040305/vayureader
+cd vayureader
+cp .env.example .env
+docker-compose up -d --build
+```
+
+Configuration is managed through environment variables.
+
+---
+
+## Contribution
+
+Contributions are welcome, especially in the following areas:
+
+* Backend scalability and performance improvements
+* Security enhancements and threat modeling
+* UI and usability improvements
+* Documentation updates
+
+---
+
+## Notes
+
+* Version 1.1.0 focuses on strict security with encryption-heavy design
+* Version 2.0.0 introduces database flexibility, configurable security, and optimized PDF access mechanisms
+* The system has transitioned into a more scalable and maintainable architecture
+
+---
