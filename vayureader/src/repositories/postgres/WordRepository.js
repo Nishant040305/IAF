@@ -102,6 +102,30 @@ class WordRepository extends PgBaseRepository {
         );
         return rows.map(r => this.toJS(r));
     }
+
+    /**
+     * Cursor-based pagination for words by word ASC.
+     */
+    async findPageByCursor(cursor, limit = 100) {
+        if (cursor) {
+            const { rows } = await this.pool.query(
+                `SELECT * FROM ${this.tableName}
+                 WHERE word > $1
+                 ORDER BY word ASC
+                 LIMIT $2`,
+                [cursor, limit]
+            );
+            return rows.map(r => this.toJS(r));
+        }
+
+        const { rows } = await this.pool.query(
+            `SELECT * FROM ${this.tableName}
+             ORDER BY word ASC
+             LIMIT $1`,
+            [limit]
+        );
+        return rows.map(r => this.toJS(r));
+    }
 }
 
 module.exports = new WordRepository();

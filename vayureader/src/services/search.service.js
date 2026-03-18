@@ -8,6 +8,15 @@
 
 const { esClient, INDICES, isConnected } = require('../config/elasticsearch');
 
+const getRefreshPolicy = () => {
+    const raw = String(process.env.ES_REFRESH_POLICY || 'false').toLowerCase();
+    if (raw === 'true') return true;
+    if (raw === 'wait_for') return 'wait_for';
+    return false;
+};
+
+const ES_REFRESH_POLICY = getRefreshPolicy();
+
 /**
  * Index a word document in Elasticsearch.
  * 
@@ -30,7 +39,7 @@ const indexWord = async (word) => {
                 antonyms: word.antonyms || [],
                 mongoId: word._id.toString()
             },
-            refresh: true
+            refresh: ES_REFRESH_POLICY
         });
 
         return true;
@@ -60,7 +69,7 @@ const indexAbbreviation = async (abbr) => {
                 fullForm: abbr.fullForm,
                 mongoId: abbr._id.toString()
             },
-            refresh: true
+            refresh: ES_REFRESH_POLICY
         });
 
         return true;
@@ -82,7 +91,7 @@ const deleteWord = async (id) => {
         await esClient.delete({
             index: INDICES.WORDS,
             id: id.toString(),
-            refresh: true
+            refresh: ES_REFRESH_POLICY
         });
 
         return true;
@@ -106,7 +115,7 @@ const deleteAbbreviation = async (id) => {
         await esClient.delete({
             index: INDICES.ABBREVIATIONS,
             id: id.toString(),
-            refresh: true
+            refresh: ES_REFRESH_POLICY
         });
 
         return true;
@@ -286,7 +295,7 @@ const bulkIndexWords = async (words) => {
             }
         ]);
 
-        const result = await esClient.bulk({ body: operations, refresh: true });
+        const result = await esClient.bulk({ body: operations, refresh: ES_REFRESH_POLICY });
 
         if (result.errors) {
             console.error('[ES] Bulk index words had errors');
@@ -317,7 +326,7 @@ const bulkIndexAbbreviations = async (abbreviations) => {
             }
         ]);
 
-        const result = await esClient.bulk({ body: operations, refresh: true });
+        const result = await esClient.bulk({ body: operations, refresh: ES_REFRESH_POLICY });
 
         if (result.errors) {
             console.error('[ES] Bulk index abbreviations had errors');

@@ -35,7 +35,7 @@ class PdfDocumentRepository extends PgBaseRepository {
      * Search PDFs with regex-like text matching.
      * Replaces MongoDB $regex with PostgreSQL ILIKE.
      */
-    async searchWithPagination(searchTerm, page, limit) {
+    async searchWithPagination(searchTerm, page, limit, select = null) {
         const skip = (page - 1) * limit;
         let filter = {};
 
@@ -51,7 +51,8 @@ class PdfDocumentRepository extends PgBaseRepository {
             this.find(filter, {
                 sort: { createdAt: -1 },
                 skip,
-                limit
+                limit,
+                select: Array.isArray(select) ? select : undefined
             }),
             this.count(filter)
         ]);
@@ -64,6 +65,72 @@ class PdfDocumentRepository extends PgBaseRepository {
      */
     async incrementViewCount(id) {
         return this.updateById(id, { $inc: { viewCount: 1 } });
+    }
+
+    /**
+     * Cursor-based pagination for PDFs.
+     * Sort order: created_at DESC, id DESC.
+     */
+    async findPageByCursor({ category = null, limit = 50, cursor = null, select = null } = {}) {
+        const conditions = [];
+        const values = [];
+        let idx = 1;
+
+        if (category) {
+            conditions.push(`category = $${idx}`);
+            values.push(category);
+            idx++;
+        }
+
+        if (cursor && cursor.createdAt && cursor.id) {
+            conditions.push(`(created_at, id) < ($${idx}, $${idx + 1})`);
+            values.push(cursor.createdAt, cursor.id);
+            idx += 2;
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const selectClause = this.buildSelect(Array.isArray(select) ? select : null);
+
+        values.push(limit);
+        const sql = `SELECT ${selectClause} FROM ${this.tableName}
+                     ${whereClause}
+                     ORDER BY created_at DESC, id DESC
+                     LIMIT $${idx}`;
+        const { rows } = await this.pool.query(sql, values);
+        return rows.map(r => this.toJS(r));
+    }
+
+    /**
+     * Cursor-based search with ILIKE.
+     * Sort order: created_at DESC, id DESC.
+     */
+    async searchWithCursor({ searchTerm = null, limit = 50, cursor = null, select = null } = {}) {
+        const conditions = [];
+        const values = [];
+        let idx = 1;
+
+        if (searchTerm) {
+            conditions.push(`(title ILIKE $${idx} OR content ILIKE $${idx} OR category ILIKE $${idx})`);
+            values.push(`%${searchTerm}%`);
+            idx++;
+        }
+
+        if (cursor && cursor.createdAt && cursor.id) {
+            conditions.push(`(created_at, id) < ($${idx}, $${idx + 1})`);
+            values.push(cursor.createdAt, cursor.id);
+            idx += 2;
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const selectClause = this.buildSelect(Array.isArray(select) ? select : null);
+
+        values.push(limit);
+        const sql = `SELECT ${selectClause} FROM ${this.tableName}
+                     ${whereClause}
+                     ORDER BY created_at DESC, id DESC
+                     LIMIT $${idx}`;
+        const { rows } = await this.pool.query(sql, values);
+        return rows.map(r => this.toJS(r));
     }
 
     /**

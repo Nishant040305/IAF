@@ -68,6 +68,55 @@ class AbbreviationRepository extends PgBaseRepository {
             fullForm: r.full_form
         }));
     }
+
+    /**
+     * Cursor-based pagination for abbreviations by abbreviation ASC.
+     */
+    async findPageByCursor(cursor, limit = 100) {
+        if (cursor) {
+            const { rows } = await this.pool.query(
+                `SELECT * FROM ${this.tableName}
+                 WHERE abbreviation > $1
+                 ORDER BY abbreviation ASC
+                 LIMIT $2`,
+                [cursor, limit]
+            );
+            return rows.map(r => this.toJS(r));
+        }
+
+        const { rows } = await this.pool.query(
+            `SELECT * FROM ${this.tableName}
+             ORDER BY abbreviation ASC
+             LIMIT $1`,
+            [limit]
+        );
+        return rows.map(r => this.toJS(r));
+    }
+
+    /**
+     * Cursor-based pagination by created_at DESC, id DESC.
+     */
+    async findPageByCreatedAtCursor({ cursor = null, limit = 100 } = {}) {
+        const conditions = [];
+        const values = [];
+        let idx = 1;
+
+        if (cursor && cursor.createdAt && cursor.id) {
+            conditions.push(`(created_at, id) < ($${idx}, $${idx + 1})`);
+            values.push(cursor.createdAt, cursor.id);
+            idx += 2;
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        values.push(limit);
+
+        const sql = `SELECT * FROM ${this.tableName}
+                     ${whereClause}
+                     ORDER BY created_at DESC, id DESC
+                     LIMIT $${idx}`;
+        const { rows } = await this.pool.query(sql, values);
+        return rows.map(r => this.toJS(r));
+    }
 }
 
 module.exports = new AbbreviationRepository();

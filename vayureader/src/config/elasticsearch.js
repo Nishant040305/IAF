@@ -24,15 +24,28 @@ const INDICES = {
     ABBREVIATIONS: 'vayureader_abbreviations'
 };
 
+const HEALTH_CACHE_TTL_MS = parseInt(process.env.ES_HEALTH_TTL_MS || '30000', 10);
+let lastHealthCheck = 0;
+let lastHealthStatus = null;
+
 /**
  * Check if Elasticsearch is connected.
  */
 const isConnected = async () => {
     try {
+        const now = Date.now();
+        if (lastHealthStatus !== null && (now - lastHealthCheck) < HEALTH_CACHE_TTL_MS) {
+            return lastHealthStatus;
+        }
+
         const health = await esClient.cluster.health();
-        return health.status !== 'red';
+        lastHealthStatus = health.status !== 'red';
+        lastHealthCheck = now;
+        return lastHealthStatus;
     } catch (error) {
         console.error('[ES] Connection check failed:', error.message);
+        lastHealthStatus = false;
+        lastHealthCheck = Date.now();
         return false;
     }
 };
