@@ -19,7 +19,7 @@ const { connectDB } = require('./config/database');
 const { corsOptions } = require('./config/cors');
 
 // Middleware
-const { apiLimiter, fileReadLimiter } = require('./middleware/rateLimiter');
+const { apiLimiter } = require('./middleware/rateLimiter');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 const { trimFields } = require('./middleware/validate');
 const { requestTimeout } = require('./middleware/timeout');
@@ -141,11 +141,7 @@ app.use('/api', (req, res, next) => {
     requestTimeout(30000)(req, res, next);
 });
 
-// SECURITY: Static file serving for /uploads has been replaced with authenticated serving.
-// Files go through unifiedAuth middleware to prevent unauthenticated access.
-const { unifiedAuth } = require('./middleware/adminAuth');
-const { serveFile } = require('./controllers/pdf.controller');
-app.get('/uploads/:folder/:filename', fileReadLimiter, unifiedAuth, serveFile);
+// SECURITY: File downloads are served by Nginx using signed URLs.
 
 // =============================================================================
 // ROUTES

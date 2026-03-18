@@ -15,7 +15,8 @@ require('dotenv').config();
 const REQUIRED_ENV_VARS = [
     'POSTGRES_URI',
     'JWT_SECRET',
-    'OTP_GATEWAY_URL'
+    'OTP_GATEWAY_URL',
+    'FILE_URL_SECRET'
 ];
 
 /**

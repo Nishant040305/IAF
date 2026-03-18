@@ -10,6 +10,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      FILE_URL_SECRET: ${FILE_URL_SECRET}
     networks:
       - backend-network
 
@@ -53,9 +55,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      FILE_URL_SECRET: ${FILE_URL_SECRET}
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/certs:/etc/nginx/certs:ro
       - ./uploads:/usr/src/app/uploads:ro
     depends_on:

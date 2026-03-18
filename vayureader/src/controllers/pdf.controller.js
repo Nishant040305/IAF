@@ -7,6 +7,7 @@
  */
 
 const path = require('path');
+const crypto = require('crypto');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const { createReadStream } = require('fs');
@@ -527,9 +528,43 @@ const deletePdf = async (req, res, next) => {
  * The file path is validated against the database to ensure it belongs to a real document.
  * This prevents direct unauthenticated access to uploaded files.
  */
-const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
 
-const serveFile = async (req, res, next) => {
+const FILE_URL_TTL_SECONDS = (() => {
+    const parsed = parseInt(process.env.FILE_URL_TTL_SECONDS || '60', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
+})();
+
+const FILE_URL_SECRET = (process.env.FILE_URL_SECRET || '')
+    .trim()
+    .replace(/^"(.*)"$/, '$1')
+    .replace(/^'(.*)'$/, '$1');
+
+const generateSignedUrl = (filePath, expiresAtSeconds = null) => {
+    if (!FILE_URL_SECRET) {
+        throw new Error('FILE_URL_SECRET is not configured');
+    }
+
+    if (!filePath.startsWith('/uploads/')) {
+        throw new Error('filePath must start with /uploads/');
+    }
+
+    const expires =
+        expiresAtSeconds ||
+        Math.floor(Date.now() / 1000) + FILE_URL_TTL_SECONDS;
+
+    // Nginx secure_link uses: md5(expires + uri + ":" + secret), base64url (no padding)
+    const data = `${expires}${filePath}:${FILE_URL_SECRET}`;
+    const signature = crypto
+        .createHash('md5')
+        .update(data)
+        .digest('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+
+    return `${filePath}?expires=${expires}&signature=${signature}`;
+};
+const getSignedFileUrl = async (req, res, next) => {
     try {
         // Security: Block path traversal in URL params
         const { folder, filename } = req.params;
@@ -545,11 +580,11 @@ const serveFile = async (req, res, next) => {
         const requestedPath = `/uploads/${folder}/${filename}`;
         const cacheKey = `file_auth:${requestedPath}`;
 
-        let meta;
+        let exists;
         const cachedData = await redisClient.get(cacheKey);
 
         if (cachedData) {
-            meta = JSON.parse(cachedData);
+            exists = true;
         } else {
             // Validate that this file belongs to a real PDF document
             const pdf = await PdfDocumentRepository.findByFileUrl(requestedPath);
@@ -558,34 +593,19 @@ const serveFile = async (req, res, next) => {
                 return response.notFound(res, 'File not found');
             }
 
-            // Determine content type
-            const ext = path.extname(req.params.filename).toLowerCase();
-            const mimeTypes = {
-                '.pdf': 'application/pdf',
-                '.jpg': 'image/jpeg',
-                '.jpeg': 'image/jpeg',
-                '.png': 'image/png',
-                '.webp': 'image/webp',
-                '.gif': 'image/gif'
-            };
-            const contentType = mimeTypes[ext] || 'application/octet-stream';
-
-            meta = {
-                valid: true,
-                contentType: contentType
-            };
-
             // Cache for short TTL (1 hour)
-            await redisClient.set(cacheKey, JSON.stringify(meta), { EX: 3600 });
+            await redisClient.set(cacheKey, '1', { EX: 3600 });
+            exists = true;
         }
 
-        const internalPath = `/internal-uploads/${req.params.folder}/${req.params.filename}`;
+        if (!exists) {
+            return response.notFound(res, 'File not found');
+        }
 
-        // Offload file transfer to Nginx internal location via X-Accel-Redirect
-        // Nginx will handle range requests, caching headers, and synchronous fs reads natively
-        res.setHeader('Content-Type', meta.contentType);
-        res.setHeader('X-Accel-Redirect', internalPath);
-        res.end();
+        const expiresAtSeconds = Math.floor(Date.now() / 1000) + FILE_URL_TTL_SECONDS;
+        const signedUrl = generateSignedUrl(requestedPath, expiresAtSeconds);
+
+        response.success(res, { url: signedUrl });
     } catch (error) {
         next(error);
     }
@@ -600,5 +620,5 @@ module.exports = {
     updatePdf,
     deletePdf,
     getCategories,
-    serveFile
+    getSignedFileUrl
 };

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../utils/api';
 import { getAdminToken } from '../utils/adminToken';
 import { getSessionKey, encrypt } from '../utils/encryption';
-import { createDpopProof, appendDpopQueryParam } from '../utils/dpop';
 import { usePdfEvents } from '../hooks/usePdfEvents';
 import { useNotifications, NotificationToast } from '../hooks/useNotifications';
 import Pagination from './Pagination';
@@ -180,27 +179,32 @@ export default function PdfManager(props) {
       return;
     }
 
-    const SECURITY_BYPASS = (window.__ENV__?.REACT_APP_SECURITY_BYPASS || process.env.REACT_APP_SECURITY_BYPASS || '') === 'true';
-
     try {
-      const token = getAdminToken();
-      const rawUrl = `${api.defaults.baseURL}${pdfPath}`;
-      let targetUrl = rawUrl;
-
-      // Skip DPoP when security bypass is active
-      if (!SECURITY_BYPASS && token) {
-        const dpopProof = await createDpopProof({
-          method: 'GET',
-          requestUri: rawUrl,
-          accessToken: token
-        });
-        targetUrl = appendDpopQueryParam(rawUrl, dpopProof);
+      const normalizedPath = pdfPath.startsWith('http')
+        ? new URL(pdfPath).pathname
+        : pdfPath;
+      const parts = normalizedPath.split('/').filter(Boolean);
+      if (parts.length < 3 || parts[0] !== 'uploads') {
+        throw new Error('Invalid PDF path');
       }
+
+      const folder = parts[1];
+      const filename = parts.slice(2).join('/');
+      const response = await api.get(`/api/pdfs/file/${encodeURIComponent(folder)}/${encodeURIComponent(filename)}`);
+      const signedPath = response?.data?.data?.url;
+
+      if (!signedPath) {
+        throw new Error('Signed URL not returned');
+      }
+
+      const targetUrl = signedPath.startsWith('http')
+        ? signedPath
+        : `${api.defaults.baseURL}${signedPath}`;
 
       popup.location.href = targetUrl;
     } catch (error) {
       popup.close();
-      addNotification('Failed to generate secure file access proof.', 'error');
+      addNotification('Failed to generate secure file URL.', 'error');
     }
   };
 
