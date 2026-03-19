@@ -7,7 +7,7 @@
  */
 
 // Load environment configuration first (validates required vars)
-const { server } = require('./config/environment');
+const { server, minio } = require('./config/environment');
 
 const express = require('express');
 const cors = require('cors');
@@ -214,6 +214,10 @@ const startServer = async () => {
         // Connect to Redis
         const { connectRedis } = require('./config/redis');
         await connectRedis();
+
+        //connect to minio
+        const { connectMinio } = require('./config/minio');
+        if (minio.enable) await connectMinio();
 
         // Start HTTP server
         app.listen(server.port, () => {

@@ -26,43 +26,38 @@ const { validateObjectId, trimFields } = require('../middleware/validate');
 const { verifyMultipartE2EESignature } = require('../middleware/encryption');
 const { ALLOWED_TYPES } = require('../utils/fileValidator');
 
+// Environment
+const { minio } = require("../config/environment");
+
 // =============================================================================
 // FILE UPLOAD CONFIGURATION
 // =============================================================================
 
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
 
-// Ensure upload directory exists
-if (!fs.existsSync(UPLOAD_DIR)) {
+if (!minio.enable && !fs.existsSync(UPLOAD_DIR)) {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-const storage = multer.diskStorage({
+const storage = minio.enable ? multer.memoryStorage() : multer.diskStorage({
     destination: (req, file, cb) => {
-        if (!req.folderName) {
-            req.folderName = uuidv4();
-        }
+        if (!req.folderName) req.folderName = uuidv4();
         const uploadPath = path.join(UPLOAD_DIR, req.folderName);
-        // Use async mkdir to prevent blocking the event loop
         fs.mkdir(uploadPath, { recursive: true }, (err) => {
             if (err) return cb(err);
             cb(null, uploadPath);
         });
     },
     filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, uuidv4() + ext);
+        cb(null, uuidv4() + path.extname(file.originalname));
     }
 });
 
 const fileFilter = (req, file, cb) => {
-    // SECURITY: Strictly allow ONLY PDF files. Reject all images, documents, and executables.
     const allowedMimes = [...ALLOWED_TYPES.pdf];
-    if (allowedMimes.includes(file.mimetype)) {
-        cb(null, true);
-    } else {
-        cb(new Error('Security check failed: Only strictly typed PDF files are allowed'), false);
-    }
+    allowedMimes.includes(file.mimetype)
+        ? cb(null, true)
+        : cb(new Error('Security check failed: Only strictly typed PDF files are allowed'), false);
 };
 
 const upload = multer({

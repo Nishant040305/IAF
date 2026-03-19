@@ -2,7 +2,6 @@
  * PDF Sanitizer
  *
  * Rebuilds PDF content into a clean document and strips interactive/action keys.
- * Stored output should be a sanitized version of the uploaded file.
  *
  * @module utils/pdfSanitizer
  */
@@ -18,17 +17,25 @@ const deleteIfPresent = (node, key) => {
     return true;
 };
 
-/**
- * Sanitize a PDF in place by rebuilding document pages and stripping active keys.
- *
- * @param {string} filePath - Absolute path to file.
- * @returns {Promise<{success: boolean, originalSize: number, sanitizedSize: number, strippedKeys: number}>}
- */
-const sanitizePdfInPlace = async (filePath) => {
-    const originalBytes = await fs.readFile(filePath);
-    const originalSize = originalBytes.length;
+const CATALOG_KEYS_TO_STRIP = [
+    'OpenAction',
+    'AA',
+    'AcroForm',
+    'Names',
+    'JavaScript',
+    'Perms',
+    'Collection'
+];
 
-    const sourceDoc = await PDFDocument.load(originalBytes, {
+/**
+ * Core sanitization logic — operates purely on bytes.
+ * Accepts a Buffer or Uint8Array, returns a sanitized Buffer.
+ *
+ * @param {Buffer|Uint8Array} inputBytes
+ * @returns {Promise<Buffer>}
+ */
+const sanitizePdfBytes = async (inputBytes) => {
+    const sourceDoc = await PDFDocument.load(inputBytes, {
         ignoreEncryption: false,
         updateMetadata: false
     });
@@ -37,37 +44,25 @@ const sanitizePdfInPlace = async (filePath) => {
         throw new Error('Encrypted PDFs are not allowed');
     }
 
-    const sanitizedDoc = await PDFDocument.create();
-    let strippedKeys = 0;
-
     const pageIndices = sourceDoc.getPageIndices();
     if (!pageIndices.length) {
         throw new Error('PDF has no pages');
     }
 
+    const sanitizedDoc = await PDFDocument.create();
+
     const copiedPages = await sanitizedDoc.copyPages(sourceDoc, pageIndices);
     for (const page of copiedPages) {
-        strippedKeys += deleteIfPresent(page.node, 'Annots') ? 1 : 0;
-        strippedKeys += deleteIfPresent(page.node, 'AA') ? 1 : 0;
-        strippedKeys += deleteIfPresent(page.node, 'AdditionalActions') ? 1 : 0;
+        deleteIfPresent(page.node, 'Annots');
+        deleteIfPresent(page.node, 'AA');
+        deleteIfPresent(page.node, 'AdditionalActions');
         sanitizedDoc.addPage(page);
     }
 
-    // Explicitly strip dangerous catalog-level interactive keys.
-    const catalogKeysToStrip = [
-        'OpenAction',
-        'AA',
-        'AcroForm',
-        'Names',
-        'JavaScript',
-        'Perms',
-        'Collection'
-    ];
-    for (const key of catalogKeysToStrip) {
-        strippedKeys += deleteIfPresent(sanitizedDoc.catalog.dict, key) ? 1 : 0;
+    for (const key of CATALOG_KEYS_TO_STRIP) {
+        deleteIfPresent(sanitizedDoc.catalog.dict, key);
     }
 
-    // Remove producer metadata from the original file chain and set trusted producer.
     sanitizedDoc.setProducer('VayuReader PDF Sanitizer');
     sanitizedDoc.setCreator('VayuReader Backend');
 
@@ -77,16 +72,34 @@ const sanitizePdfInPlace = async (filePath) => {
         updateFieldAppearances: false
     });
 
-    await fs.writeFile(filePath, sanitizedBytes);
+    return Buffer.from(sanitizedBytes);
+};
 
-    return {
-        success: true,
-        originalSize,
-        sanitizedSize: sanitizedBytes.length,
-        strippedKeys
-    };
+/**
+ * Sanitize a PDF buffer (MinIO / memory storage path).
+ * Accepts a Buffer, returns a sanitized Buffer.
+ *
+ * @param {Buffer} buffer
+ * @returns {Promise<Buffer>}
+ */
+const sanitizePdfBuffer = async (buffer) => {
+    return sanitizePdfBytes(buffer);
+};
+
+/**
+ * Sanitize a PDF in place (disk storage path).
+ * Reads from filePath, writes sanitized result back to same path.
+ *
+ * @param {string} filePath - Absolute path to file.
+ * @returns {Promise<void>}
+ */
+const sanitizePdfInPlace = async (filePath) => {
+    const inputBytes = await fs.readFile(filePath);
+    const sanitizedBytes = await sanitizePdfBytes(inputBytes);
+    await fs.writeFile(filePath, sanitizedBytes);
 };
 
 module.exports = {
+    sanitizePdfBuffer,
     sanitizePdfInPlace
 };

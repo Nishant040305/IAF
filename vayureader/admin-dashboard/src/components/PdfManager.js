@@ -174,6 +174,7 @@ export default function PdfManager(props) {
 
   const handleViewPdf = async (pdfPath) => {
     const popup = window.open('', '_blank');
+    console.log(pdfPath);
     if (!popup) {
       addNotification('Popup was blocked by your browser.', 'warning');
       return;
@@ -184,26 +185,20 @@ export default function PdfManager(props) {
         ? new URL(pdfPath).pathname
         : pdfPath;
       const parts = normalizedPath.split('/').filter(Boolean);
-      if (parts.length < 3 || parts[0] !== 'uploads') {
-        throw new Error('Invalid PDF path');
-      }
-
       const folder = parts[1];
       const filename = parts.slice(2).join('/');
+      console.log(folder, filename);
       const response = await api.get(`/api/pdfs/file/${encodeURIComponent(folder)}/${encodeURIComponent(filename)}`);
       const signedPath = response?.data?.data?.url;
-
+      console.log(response)
+      console.log(signedPath);
       if (!signedPath) {
         throw new Error('Signed URL not returned');
       }
-
-      const targetUrl = signedPath.startsWith('http')
-        ? signedPath
-        : `${api.defaults.baseURL}${signedPath}`;
-
-      popup.location.href = targetUrl;
+      popup.location.href = signedPath;
     } catch (error) {
       popup.close();
+      console.log(error);
       addNotification('Failed to generate secure file URL.', 'error');
     }
   };

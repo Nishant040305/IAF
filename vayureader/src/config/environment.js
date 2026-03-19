@@ -150,6 +150,17 @@ const pdfSecurity = {
     scanMode: process.env.PDF_SECURITY_MODE || 'strict',
     maxFileSizeMB: parseInt(process.env.MAX_UPLOAD_SIZE_MB || '100', 10)
 };
+/**
+ * MinIO configurations
+ */
+const minio = {
+    endpoint: process.env.MINIO_ENDPOINT || 'http://minio:9000',
+    region: process.env.MINIO_REGION || 'india',
+    accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
+    secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
+    bucket: process.env.MINIO_BUCKET || 'vayureader',
+    enable: process.env.MINIO_ENABLE === 'true'
+};
 
 module.exports = {
     server,
@@ -160,5 +171,6 @@ module.exports = {
     rateLimit,
     redis,
     dpop,
-    pdfSecurity
+    pdfSecurity,
+    minio
 };

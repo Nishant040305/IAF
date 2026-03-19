@@ -35,7 +35,18 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+    location /storage/ {
+        proxy_pass http://minio:9000/;
+        proxy_set_header Host minio:9000;
+        proxy_set_header Authorization "";
 
+        proxy_cache minio;
+        proxy_cache_valid 200 120m;
+        proxy_cache_key "$uri";
+        proxy_ignore_headers Set-Cookie;
+        proxy_force_ranges on;
+        add_header X-Cache-Status $upstream_cache_status;
+    }
     # ==========================================================
     # SIGNED FILE ACCESS ENTRY POINT
     # ==========================================================
