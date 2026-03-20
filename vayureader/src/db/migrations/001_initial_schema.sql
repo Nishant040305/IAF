@@ -1,11 +1,10 @@
 -- ============================================================================
--- VayuReader PostgreSQL Schema
--- Migration 001: Initial schema (replaces MongoDB collections)
+-- VayuReader PostgreSQL Schema (IDEMPOTENT VERSION)
 -- ============================================================================
 
--- Enable UUID extension
+-- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";   -- For text search
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- ============================================================================
 -- USERS TABLE
@@ -26,8 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_users_phone_number ON users (phone_number);
-CREATE INDEX idx_users_device_id ON users (device_id) WHERE device_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_phone_number ON users (phone_number);
+CREATE INDEX IF NOT EXISTS idx_users_device_id ON users (device_id) WHERE device_id IS NOT NULL;
 
 -- ============================================================================
 -- ADMINS TABLE
@@ -46,8 +45,8 @@ CREATE TABLE IF NOT EXISTS admins (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_admins_contact ON admins (contact);
-CREATE INDEX idx_admins_name ON admins (name);
+CREATE INDEX IF NOT EXISTS idx_admins_contact ON admins (contact);
+CREATE INDEX IF NOT EXISTS idx_admins_name ON admins (name);
 
 -- ============================================================================
 -- PDF DOCUMENTS TABLE
@@ -64,16 +63,26 @@ CREATE TABLE IF NOT EXISTS pdf_documents (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_pdf_documents_category ON pdf_documents (category) WHERE category IS NOT NULL;
-CREATE INDEX idx_pdf_documents_created_at ON pdf_documents (created_at DESC);
-CREATE INDEX idx_pdf_documents_pdf_url ON pdf_documents (pdf_url);
-CREATE INDEX idx_pdf_documents_thumbnail ON pdf_documents (thumbnail) WHERE thumbnail IS NOT NULL;
--- GIN index for full-text search using trgm
-CREATE INDEX idx_pdf_documents_title_trgm ON pdf_documents USING gin (title gin_trgm_ops);
-CREATE INDEX idx_pdf_documents_content_trgm ON pdf_documents USING gin (content gin_trgm_ops) WHERE content IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pdf_documents_category 
+    ON pdf_documents (category) WHERE category IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_pdf_documents_created_at 
+    ON pdf_documents (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_pdf_documents_pdf_url 
+    ON pdf_documents (pdf_url);
+
+CREATE INDEX IF NOT EXISTS idx_pdf_documents_thumbnail 
+    ON pdf_documents (thumbnail) WHERE thumbnail IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_pdf_documents_title_trgm 
+    ON pdf_documents USING gin (title gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_pdf_documents_content_trgm 
+    ON pdf_documents USING gin (content gin_trgm_ops) WHERE content IS NOT NULL;
 
 -- ============================================================================
--- WORDS TABLE (Dictionary)
+-- WORDS TABLE
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS words (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -85,8 +94,8 @@ CREATE TABLE IF NOT EXISTS words (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_words_word ON words (word);
-CREATE INDEX idx_words_word_trgm ON words USING gin (word gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_words_word ON words (word);
+CREATE INDEX IF NOT EXISTS idx_words_word_trgm ON words USING gin (word gin_trgm_ops);
 
 -- ============================================================================
 -- ABBREVIATIONS TABLE
@@ -99,12 +108,17 @@ CREATE TABLE IF NOT EXISTS abbreviations (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_abbreviations_abbreviation ON abbreviations (abbreviation);
-CREATE INDEX idx_abbreviations_abbreviation_trgm ON abbreviations USING gin (abbreviation gin_trgm_ops);
-CREATE INDEX idx_abbreviations_full_form_trgm ON abbreviations USING gin (full_form gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_abbreviations_abbreviation 
+    ON abbreviations (abbreviation);
+
+CREATE INDEX IF NOT EXISTS idx_abbreviations_abbreviation_trgm 
+    ON abbreviations USING gin (abbreviation gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_abbreviations_full_form_trgm 
+    ON abbreviations USING gin (full_form gin_trgm_ops);
 
 -- ============================================================================
--- AUTO-UPDATE updated_at TRIGGER
+-- FUNCTION: update_updated_at
 -- ============================================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -112,26 +126,49 @@ BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ language 'plpgsql';
-
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_admins_updated_at BEFORE UPDATE ON admins
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_pdf_documents_updated_at BEFORE UPDATE ON pdf_documents
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_words_updated_at BEFORE UPDATE ON words
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_abbreviations_updated_at BEFORE UPDATE ON abbreviations
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+$$ LANGUAGE plpgsql;
 
 -- ============================================================================
--- FOREIGN KEY: users.created_by_admin -> admins.id
+-- TRIGGERS (safe re-create)
 -- ============================================================================
-ALTER TABLE users
-    ADD CONSTRAINT fk_users_created_by_admin
-    FOREIGN KEY (created_by_admin) REFERENCES admins(id) ON DELETE SET NULL;
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+CREATE TRIGGER update_users_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_admins_updated_at ON admins;
+CREATE TRIGGER update_admins_updated_at
+BEFORE UPDATE ON admins
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_pdf_documents_updated_at ON pdf_documents;
+CREATE TRIGGER update_pdf_documents_updated_at
+BEFORE UPDATE ON pdf_documents
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_words_updated_at ON words;
+CREATE TRIGGER update_words_updated_at
+BEFORE UPDATE ON words
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_abbreviations_updated_at ON abbreviations;
+CREATE TRIGGER update_abbreviations_updated_at
+BEFORE UPDATE ON abbreviations
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- FOREIGN KEY (safe)
+-- ============================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'fk_users_created_by_admin'
+    ) THEN
+        ALTER TABLE users
+        ADD CONSTRAINT fk_users_created_by_admin
+        FOREIGN KEY (created_by_admin)
+        REFERENCES admins(id)
+        ON DELETE SET NULL;
+    END IF;
+END $$;
