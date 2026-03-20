@@ -9,6 +9,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    mem_limit: 512m
+    cpus: 0.5
     networks:
       - backend-network
 
@@ -26,10 +28,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      minio:
+        condition: service_healthy
     env_file:
       - .env
     volumes:
       - ./uploads:/usr/src/app/uploads
+    mem_limit: 1g
+    cpus: 1.0
     networks:
       - backend-network
     healthcheck:
@@ -61,8 +67,13 @@ services:
         condition: service_healthy
       admin-dashboard:
         condition: service_started
+      minio:
+        condition: service_healthy
+    mem_limit: 512m
+    cpus: 1.0
     networks:
       - backend-network
+      - storage-network
 
   # ============================================================================
   # POSTGRESQL (General Data)
@@ -78,6 +89,8 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./src/db/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql:ro
+    mem_limit: 1g
+    cpus: 1.0
     networks:
       - backend-network
     healthcheck:
@@ -101,6 +114,8 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-logs:/var/log/clickhouse-server
+    mem_limit: 1g
+    cpus: 1.0
     networks:
       - backend-network
     healthcheck:
@@ -117,6 +132,9 @@ services:
     image: redis:7.2-alpine
     container_name: vayureader_cache
     restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    mem_limit: 384m
+    cpus: 0.5
     networks:
       - backend-network
 
@@ -130,9 +148,11 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms256m -Xmx256m
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     volumes:
       - es-data:/usr/share/elasticsearch/data
+    mem_limit: 1g
+    cpus: 1.0
     networks:
       - backend-network
     healthcheck:
@@ -142,15 +162,50 @@ services:
       retries: 5
       start_period: 30s
 
+  # ============================================================================
+  # MINIO (Object Storage)
+  # ============================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: vayureader_storage
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      MINIO_STORAGE_CLASS_STANDARD: EC:0
+      MINIO_API_REQUESTS_MAX: 600
+      MINIO_API_REQUESTS_DEADLINE: 10s
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9001:9001"
+    mem_limit: 2g
+    cpus: 2.0
+    networks:
+      - backend-network
+      - storage-network
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 # ==============================================================================
 # NETWORKS & VOLUMES
 # ==============================================================================
 networks:
   backend-network:
     driver: bridge
+  storage-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "9000"
 
 volumes:
   postgres-data:
   clickhouse-data:
   clickhouse-logs:
   es-data:
+  minio-data:

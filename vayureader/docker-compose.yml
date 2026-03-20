@@ -32,6 +32,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      minio:
+        condition: service_healthy        # ← added
     env_file:
       - .env
     networks:
@@ -67,8 +69,11 @@ services:
         condition: service_healthy
       admin-dashboard:
         condition: service_started
+      minio:
+        condition: service_healthy        # ← added
     networks:
       - backend-network
+      - storage-network                   # ← added
 
   # ============================================================================
   # POSTGRESQL (General Data)
@@ -116,13 +121,14 @@ services:
       retries: 10
       start_period: 10s
 
-    # ============================================================================
-    # REDIS
-    # ============================================================================
+  # ============================================================================
+  # REDIS
+  # ============================================================================
   redis:
     image: redis:7-alpine
     container_name: vayureader_cache
     restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru  # ← added
     networks:
       - backend-network
 
@@ -147,6 +153,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
   # ============================================================================
   # MINIO (Object Storage)
   # ============================================================================
@@ -158,25 +165,34 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      MINIO_STORAGE_CLASS_STANDARD: EC:0          
+      MINIO_API_REQUESTS_MAX: 600                 
+      MINIO_API_REQUESTS_DEADLINE: 10s            
     volumes:
       - minio-data:/data
     ports:
-      - "9000:9000"   # S3 API
+      - "9000:9000"   # S3 API (kept exposed for dev)
       - "9001:9001"   # Web console
     networks:
       - backend-network
+      - storage-network                           
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
       timeout: 5s
       retries: 5
       start_period: 10s
+
 # ==============================================================================
 # NETWORKS & VOLUMES
 # ==============================================================================
 networks:
   backend-network:
     driver: bridge
+  storage-network:                               
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "9000"
 
 volumes:
   postgres-data:
