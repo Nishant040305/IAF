@@ -73,21 +73,29 @@ class PdfDocumentRepository extends PgBaseRepository {
      * Takes an object mapping pdf ID to total increment counts.
      */
     async incrementViewCountsBulk(viewCounts) {
-        const queries = [];
+        const ids = [];
+        const counts = [];
+        
         for (const [id, count] of Object.entries(viewCounts)) {
             if (count > 0) {
-                queries.push(
-                    this.pool.query(
-                        `UPDATE ${this.tableName} SET view_count = view_count + $1, updated_at = NOW() WHERE id = $2`,
-                        [count, id]
-                    )
-                );
+                ids.push(id);
+                counts.push(count);
             }
         }
-        // Execute all updates concurrently
-        if (queries.length > 0) {
-            await Promise.all(queries);
-        }
+
+        if (ids.length === 0) return;
+
+        // HIGHLY SCALABLE BATCH UPDATE:
+        // Uses PostgreSQL unnest arrays mapped to rows inside ONE single network round-trip.
+        // Drops O(n) promise queries to O(1) query completely averting connection pool exhaustion.
+        const query = `
+            UPDATE ${this.tableName} AS t
+            SET view_count = t.view_count + v.count, updated_at = NOW()
+            FROM (SELECT unnest($1::uuid[]) AS id, unnest($2::int[]) AS count) AS v
+            WHERE t.id = v.id
+        `;
+        
+        await this.pool.query(query, [ids, counts]);
     }
 
     /**

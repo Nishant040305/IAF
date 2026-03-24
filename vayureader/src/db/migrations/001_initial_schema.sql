@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_phone_number ON users (phone_number);
 CREATE INDEX IF NOT EXISTS idx_users_device_id ON users (device_id) WHERE device_id IS NOT NULL;
 
+-- High performance TRGM indexes for fast $regex / ILIKE searching without triggering full table scans
+CREATE INDEX IF NOT EXISTS idx_users_name_trgm ON users USING gin (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_users_phone_trgm ON users USING gin (phone_number gin_trgm_ops);
+
 -- ============================================================================
 -- ADMINS TABLE
 -- ============================================================================
