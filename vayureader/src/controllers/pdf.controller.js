@@ -15,6 +15,7 @@ const { PdfDocumentRepository } = require('../repositories');
 const { logCreate, logUpdate, logDelete, logRead, RESOURCE_TYPES } = require('../services/audit.service');
 const { publishPdfEvent, PDF_EVENTS } = require('../services/pubsub.service');
 const { logPdfRead } = require('../services/userAudit.service');
+const { QueueManager, QUEUE_ROUTES } = require('../queues');
 const response = require('../utils/response');
 const { escapeRegex, sanitizeTag } = require('../utils/sanitize');
 const { validateFileType, ALLOWED_TYPES, validateExtensionMatchesContent, validateSafeFilename } = require('../utils/fileValidator');
@@ -123,18 +124,16 @@ const getCategories = async (req, res, next) => {
  */
 const getPdfById = async (req, res, next) => {
     try {
-        let pdf;
-
-        // If admin, just fetch without incrementing view count
-        if (req.admin) {
-            pdf = await PdfDocumentRepository.findById(req.params.id);
-        } else {
-            // If user (or public), increment view count
-            pdf = await PdfDocumentRepository.incrementViewCount(req.params.id);
-        }
+        let pdf = await PdfDocumentRepository.findById(req.params.id);
 
         if (!pdf) {
             return response.notFound(res, 'PDF not found');
+        }
+
+        // If user (or public), increment view count via Queue and locally for UX
+        if (!req.admin) {
+            pdf.viewCount = (pdf.viewCount || 0) + 1;
+            QueueManager.enqueue(QUEUE_ROUTES.PDF_VIEWS, { pdfId: String(pdf._id || pdf.id) }).catch(() => {});
         }
 
         // Log PDF read event for authenticated users (all details from JWT)

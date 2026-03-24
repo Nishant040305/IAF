@@ -62,9 +62,32 @@ class PdfDocumentRepository extends PgBaseRepository {
 
     /**
      * Increment view count and return updated document.
+     * @deprecated Use queue-based batching (incrementViewCountsBulk) instead.
      */
     async incrementViewCount(id) {
         return this.updateById(id, { $inc: { viewCount: 1 } });
+    }
+
+    /**
+     * Bulk increment view counts based on aggregated batched data.
+     * Takes an object mapping pdf ID to total increment counts.
+     */
+    async incrementViewCountsBulk(viewCounts) {
+        const queries = [];
+        for (const [id, count] of Object.entries(viewCounts)) {
+            if (count > 0) {
+                queries.push(
+                    this.pool.query(
+                        `UPDATE ${this.tableName} SET view_count = view_count + $1, updated_at = NOW() WHERE id = $2`,
+                        [count, id]
+                    )
+                );
+            }
+        }
+        // Execute all updates concurrently
+        if (queries.length > 0) {
+            await Promise.all(queries);
+        }
     }
 
     /**

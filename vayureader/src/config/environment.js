@@ -151,6 +151,16 @@ const pdfSecurity = {
     maxFileSizeMB: parseInt(process.env.MAX_UPLOAD_SIZE_MB || '100', 10)
 };
 
+/**
+ * Background Queue Batching Configuration
+ */
+const queue = {
+    auditBatchSize: parseInt(process.env.QUEUE_AUDIT_BATCH_SIZE || '1000', 10),
+    auditWaitTimeMs: parseInt(process.env.QUEUE_AUDIT_WAIT_TIME_MS || '5000', 10),
+    pdfViewBatchSize: parseInt(process.env.QUEUE_PDF_VIEW_BATCH_SIZE || '50', 10),
+    pdfViewWaitTimeMs: parseInt(process.env.QUEUE_PDF_VIEW_WAIT_TIME_MS || '5000', 10)
+};
+
 module.exports = {
     server,
     database,
@@ -160,5 +170,6 @@ module.exports = {
     rateLimit,
     redis,
     dpop,
-    pdfSecurity
+    pdfSecurity,
+    queue
 };

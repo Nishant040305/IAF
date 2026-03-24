@@ -21,7 +21,8 @@ const QueueManager = new BullMQProvider();
 // Shared logical queue names constant, preventing typos across apps
 const QUEUE_ROUTES = {
     AUDIT_LOGS: 'vayureader.audit.logs',
-    USER_AUDIT_LOGS: 'vayureader.user_audit.logs'
+    USER_AUDIT_LOGS: 'vayureader.user_audit.logs',
+    PDF_VIEWS: 'vayureader.pdf.views'
 };
 
 module.exports = {
