@@ -41,6 +41,37 @@ class AuditLogRepository {
     }
 
     /**
+     * Insert multiple audit log entries efficiently in bulk.
+     * ClickHouse explicitly favors batch insertion for performance.
+     */
+    async createBatch(dataArray) {
+        if (!dataArray || dataArray.length === 0) return [];
+
+        const timestampStr = this._toCHDateTime(new Date());
+
+        const entries = dataArray.map(data => ({
+            id: uuidv4(),
+            action: data.action,
+            resource_type: data.resourceType,
+            resource_id: String(data.resourceId || ''),
+            admin_id: String(data.adminId || ''),
+            admin_name: data.adminName || 'Unknown',
+            admin_contact: data.adminContact || 'Unknown',
+            details: typeof data.details === 'string' ? data.details : JSON.stringify(data.details || {}),
+            timestamp: timestampStr,
+            created_at: timestampStr
+        }));
+
+        await this.client.insert({
+            table: 'audit_logs',
+            values: entries,
+            format: 'JSONEachRow'
+        });
+
+        return entries.map(e => ({ ...e, _id: e.id }));
+    }
+
+    /**
      * Query audit logs with filters, pagination, and sorting.
      */
     async find(filter = {}, options = {}) {

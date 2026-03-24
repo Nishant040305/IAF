@@ -6,7 +6,7 @@
  * @module services/audit.service
  */
 
-const { AuditLogRepository } = require('../repositories');
+const { QueueManager, QUEUE_ROUTES } = require('../queues');
 
 /**
  * Resource types that can be audited.
@@ -44,7 +44,7 @@ const logAction = async (action, resourceType, resourceId, admin, details = {}) 
             return;
         }
 
-        await AuditLogRepository.create({
+        await QueueManager.enqueue(QUEUE_ROUTES.AUDIT_LOGS, {
             action,
             resourceType,
             resourceId: String(resourceId || ''),

@@ -49,6 +49,35 @@ class UserAuditRepository {
     }
 
     /**
+     * Insert multiple user audit log entries efficiently in bulk.
+     * ClickHouse explicitly favors batch insertion for performance.
+     */
+    async createBatch(dataArray) {
+        if (!dataArray || dataArray.length === 0) return [];
+
+        const createdAtStr = this._toCHDateTime(new Date());
+
+        const entries = dataArray.map(data => ({
+            id: uuidv4(),
+            user_id: String(data.userId || ''),
+            phone_number: data.phone_number || data.phoneNumber || '',
+            action: data.action,
+            device_id: data.deviceId || '',
+            metadata: typeof data.metadata === 'string' ? data.metadata : JSON.stringify(data.metadata || {}),
+            timestamp: this._toCHDateTime(data.timestamp || new Date()),
+            created_at: createdAtStr
+        }));
+
+        await this.client.insert({
+            table: 'user_audit_logs',
+            values: entries,
+            format: 'JSONEachRow'
+        });
+
+        return entries.map(e => ({ ...e, _id: e.id }));
+    }
+
+    /**
      * Query user audit logs with filters, pagination, and sorting.
      */
     async find(filter = {}, options = {}) {

@@ -7,6 +7,7 @@
  */
 
 const { UserAuditRepository } = require('../repositories');
+const { QueueManager, QUEUE_ROUTES } = require('../queues');
 const USER_ACTIONS = UserAuditRepository.USER_ACTIONS;
 
 /**
@@ -21,8 +22,8 @@ const USER_ACTIONS = UserAuditRepository.USER_ACTIONS;
  */
 const logUserAction = (userId, phone_number, action, deviceId, metadata = {}) => {
     try {
-        // Fire and forget - don't await, but catch errors
-        UserAuditRepository.create({
+        // Fire and forget to the queue processor - don't await, but catch errors
+        QueueManager.enqueue(QUEUE_ROUTES.USER_AUDIT_LOGS, {
             userId,
             phone_number,
             action,
@@ -32,10 +33,10 @@ const logUserAction = (userId, phone_number, action, deviceId, metadata = {}) =>
         })
             .then(() => {
                 if (process.env.NODE_ENV !== 'production') {
-                    console.log(`📋 User Audit: ${action} by ${phone_number} on device ${deviceId}`);
+                    console.log(`📋 User Audit Enqueued: ${action} by ${phone_number} on device ${deviceId}`);
                 }
             })
-            .catch(err => console.error('⚠️ User audit logging failed:', err.message));
+            .catch(err => console.error('⚠️ User audit enqueue failed:', err.message));
 
     } catch (error) {
         console.error('⚠️ User audit setup failed:', error.message);

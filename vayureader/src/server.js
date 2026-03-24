@@ -215,6 +215,10 @@ const startServer = async () => {
         const { connectRedis } = require('./config/redis');
         await connectRedis();
 
+        // Start background workers (e.g., Audit Logging queues)
+        const startAuditWorkers = require('./workers/audit.worker');
+        startAuditWorkers();
+
         // Start HTTP server
         app.listen(server.port, () => {
             console.log('');
