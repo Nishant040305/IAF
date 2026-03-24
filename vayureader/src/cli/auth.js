@@ -2,6 +2,8 @@ const inquirer = require('inquirer');
 const bcrypt = require('bcrypt');
 const { AdminRepository } = require('../repositories');
 const { logAction } = require('../services/audit.service');
+const { generateOtp, saveOtp, verifyOtp } = require('../services/otp.service');
+const { sendOtpSms } = require('../services/sms.service');
 const { shutdown } = require('./utils');
 
 let sessionAdmin = null;
@@ -23,9 +25,9 @@ async function login() {
     const credentials = await inquirer.prompt([
         {
             type: 'input',
-            name: 'email',
-            message: 'Administrative Email:',
-            validate: val => val ? true : 'Email is required'
+            name: 'contact',
+            message: 'Contact Number (or Email):',
+            validate: val => val ? true : 'Contact is required'
         },
         {
             type: 'password',
@@ -36,7 +38,7 @@ async function login() {
         }
     ]);
 
-    const admin = await AdminRepository.findByContact(credentials.email);
+    const admin = await AdminRepository.findByContact(credentials.contact);
     if (!admin) {
         console.error('❌ Invalid credentials. Access denied.');
         return await promptRetry();
@@ -48,11 +50,34 @@ async function login() {
         return await promptRetry();
     }
 
+    // Secondary Security: 2FA / OTP Verification
+    console.log(`\n📲 Sending secure verification code to ${admin.contact}...`);
+    const otpCode = generateOtp();
+    await saveOtp(admin.contact, otpCode);
+    
+    // In dev mode (skipSend), it prints to the console directly via sendOtpSms logic
+    await sendOtpSms(admin.contact, otpCode);
+
+    const { providedOtp } = await inquirer.prompt([
+        { 
+            type: 'input', 
+            name: 'providedOtp', 
+            message: 'Enter the 6-digit OTP code received:',
+            validate: val => val.length === 6 ? true : 'Must be exactly 6 digits.' 
+        }
+    ]);
+
+    const verification = await verifyOtp(providedOtp, admin.contact);
+    if (!verification.valid) {
+        console.error(`❌ OTP Verification Failed: ${verification.error}`);
+        return await promptRetry();
+    }
+
     sessionAdmin = admin;
     console.log(`\n✅ Authenticated securely as ${admin.name} (${admin.id || admin._id})\n`);
 
     // Log the CLI login instance into the global audit logs
-    await logAction('CLI_LOGIN', 'ADMIN', admin.id || admin._id, sessionAdmin, { ip: '127.0.0.1 (CLI)' });
+    await logAction('CLI_LOGIN_2FA', 'ADMIN', admin.id || admin._id, sessionAdmin, { ip: '127.0.0.1 (CLI)' });
 }
 
 module.exports = { login, getSessionAdmin };

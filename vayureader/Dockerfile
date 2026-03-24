@@ -36,6 +36,7 @@ COPY --from=builder /usr/src/app/node_modules ./node_modules
 # Copy source code
 COPY --from=builder /usr/src/app/src ./src
 COPY --from=builder /usr/src/app/scripts ./scripts
+COPY --from=builder /usr/src/app/bin ./bin
 
 # Create uploads directory with correct permissions
 RUN mkdir -p uploads && chown -R node:node uploads
