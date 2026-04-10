@@ -93,7 +93,7 @@ The backend infrastructure is built on a scalable, modular architecture incorpor
 graph TD
     %% Client interfaces
     Client["Clients / Mobile App"] -->|"HTTPS Requests"| Nginx["Nginx Layer"]
-    CLI["CLI Tools"] -->|"HTTPS / Commands"| Nginx
+    CLI["CLI Layer"] -.->|"Direct Comm & Internal Auth"| App
     
     %% API Gateway Layer
     subgraph GatewayLayer ["Gateway Layer"]
@@ -128,6 +128,7 @@ graph TD
     App -->|"Reads / Writes"| DB
     App -->|"Searches Meanings & Abbreviations"| Search
     App -->|"Creates Expirable Links"| Storage
+    Nginx -->|"Serves PDFs Statically"| Storage
     
     %% Worker tasks
     Worker -->|"Persists Count Increments"| DB
@@ -136,15 +137,15 @@ graph TD
 
 ### System Components
 
-* **Nginx Layer**: Serves as the reverse proxy and load balancer. It handles routing to appropriate endpoints, serves the React-based admin dashboard seamlessly, and channels SSE (Server-Sent Events) to the API containers.
+* **Nginx Layer**: Serves as the reverse proxy and load balancer. It handles routing to appropriate endpoints, serves the React-based admin dashboard seamlessly, serves the expirable PDF files as static assets directly from storage, and channels SSE (Server-Sent Events) to the API containers.
 * **App Containers**: Dedicated application servers handling core API orchestration. Responsible for processing frontend requests, interacting with data layers via caches, generating expirable links for secure PDF sharing, and broadcasting real-time SSE updates.
 * **Cache Block (Redis)**: A centralized tier optimizing app flow. It manages API caching to lower DB lookup latencies, maintains rate limiting controls against abuse, processes the Pub/Sub logic for SSE, and behaves as the standard queue for assigning tasks to workers.
 * **Elasticsearch**: Tailored explicitly for lighting-fast context-aware searches, particularly searching for word meanings and abbreviations.
 * **Workers**: Background processor modules designed to cleanly offload asynchronous tasks from the API layer. Key operations include pushing aggregate event logging to ClickHouse and managing delayed/sequential view-count increments onto Postgres reliably.
 * **PostgreSQL**: The normal, primary relational database. Source of truth for app objects, user configurations, and content metadata.
 * **ClickHouse**: Dedicated OLAP time-series datastore tuned for logging analytics.
-* **Upload Folder Storage**: Secure volume used for persistent storage of PDFs. These raw documents are strictly inaccessible from the web, and are delivered only via time-bound, expirable URLs created dynamically.
-* **CLI**: Companion terminal application allowing admin operations to occur alongside normal service functionality.
+* **Upload Folder Storage**: Secure volume used for persistent storage of PDFs. The backend dynamically creates time-bound, expirable URLs, and the valid requests are securely resolved by Nginx, which serves the raw files directly from this volume as static assets.
+* **CLI Layer**: Companion terminal application that bypasses the Nginx HTTPS layer. It handles its own authentication natively and communicates directly with internal components for administrative system operations.
 
 ---
 
