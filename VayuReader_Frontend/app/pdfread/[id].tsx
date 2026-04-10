@@ -8,6 +8,17 @@ import { PDF_BASE_URL } from '@/constants/config';
 import { useAuth } from '@/contexts/AuthContext';
 import apiClient from '@/lib/apiClient';
 
+const normalizePath = (value: string) => value.replace(/\\/g, '/');
+
+const extractUploadParts = (value: string) => {
+  const normalized = normalizePath(value);
+  const trimmed = normalized.startsWith('/') ? normalized.slice(1) : normalized;
+  if (!trimmed.startsWith('uploads/')) return null;
+  const parts = trimmed.split('/');
+  if (parts.length < 3) return null;
+  return { folder: parts[1], filename: parts.slice(2).join('/') };
+};
+
 type PdfDocument = {
   _id: string;
   title: string;
@@ -55,6 +66,7 @@ export default function PdfDetails() {
   const { token, user, initializing } = useAuth();
   const { width, height } = useWindowDimensions();
   const [doc, setDoc] = useState<PdfDocument | null>(null);
+  const [signedPdfUrl, setSignedPdfUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [accessedAt, setAccessedAt] = useState(() => formatAccessedAt(new Date()));
@@ -87,6 +99,32 @@ export default function PdfDetails() {
         });
         const data = response.data.data;
         setDoc(data);
+
+        // Fetch signed url if available
+        if (data.pdfUrl) {
+          const parts = extractUploadParts(data.pdfUrl);
+          if (parts) {
+            try {
+              const fileRes = await apiClient.get<any>(
+                `/api/pdfs/file/${encodeURIComponent(parts.folder)}/${encodeURIComponent(parts.filename)}`,
+                { baseURL: PDF_BASE_URL }
+              );
+              let url = fileRes.data?.data?.url;
+              if (url) {
+                const cleanBase = PDF_BASE_URL.endsWith('/') ? PDF_BASE_URL.slice(0, -1) : PDF_BASE_URL;
+                if (url.startsWith('/')) {
+                   url = `${cleanBase}${url}`;
+                } else if (!url.startsWith('http')) {
+                   url = `${cleanBase}/${url}`;
+                }
+                setSignedPdfUrl(url);
+              }
+            } catch (err) {
+              console.warn('[PdfDetails] Failed to fetch signed URL:', err);
+            }
+          }
+        }
+
       } catch (e: any) {
         setError(e.message || 'Failed to load PDF details.');
       } finally {
@@ -120,14 +158,13 @@ export default function PdfDetails() {
     return `${cleanBase}${cleanPath}`;
   };
 
-  const pdfUrl = doc.pdfUrl ? getFullUrl(PDF_BASE_URL, doc.pdfUrl) : '';
+  const pdfUrl = signedPdfUrl || (doc.pdfUrl ? getFullUrl(PDF_BASE_URL, doc.pdfUrl) : '');
   const watermarkLabel = `${user?.phone_number ?? 'Unknown user'} ${accessedAt}`;
   const watermarkItems = buildWatermarkItems(width, height);
 
   const pdfSource = {
     uri: pdfUrl,
     cache: true,
-    ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
   };
 
   return (
