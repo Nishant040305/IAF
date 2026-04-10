@@ -94,20 +94,40 @@ graph TD
     %% Client interfaces
     Client["Clients / Mobile App"] -->|"HTTPS Requests"| Nginx["Nginx Layer"]
     CLI["CLI Layer"] -.->|"Direct Comm & Internal Auth"| App
-    
+
     %% API Gateway Layer
     subgraph GatewayLayer ["Gateway Layer"]
         Nginx
     end
     Nginx -->|"Serves Static Files"| Admin["Admin Dashboard"]
     Nginx -->|"Routes API / SSE Streams"| App["App Containers"]
-    
-    %% Service Layer
+
+    %% Service Layer (App Abstractions)
     subgraph MainApplications ["Main Applications"]
         App
         Worker["Background Workers"]
     end
-    
+
+    subgraph AppAbstractions ["App Abstractions"]
+        Routes["Routes"]
+        Middleware["Middleware"]
+        Controllers["Controllers"]
+        Services["Services"]
+        Repos["Repositories"]
+        Queues["Queues"]
+    end
+
+    App --> Routes --> Middleware --> Controllers --> Services --> Repos
+    Controllers --> Queues
+
+    %% PDF Processing Abstraction
+    subgraph PdfPipeline ["PDF Processing Pipeline"]
+        Validate["File Validation"]
+        Clean["PDF Cleaning & Sanitization"]
+        Images["Thumbnail / Image Generation"]
+    end
+    Controllers --> Validate --> Clean --> Images --> Services
+
     %% Caching Layer
     subgraph CacheBlock ["Cache Block"]
         Redis[("Redis")]
@@ -115,8 +135,9 @@ graph TD
         Redis -.- note1
     end
     App -->|"Pub/Sub & Caching"| Redis
+    Queues -->|"Enqueue Jobs"| Redis
     Redis -->|"Consume Tasks"| Worker
-    
+
     %% Storage & Persistence
     subgraph DataStorageLayer ["Data & Storage Layer"]
         DB[("PostgreSQL")]
@@ -124,12 +145,12 @@ graph TD
         Logs[("ClickHouse")]
         Storage[("Upload Folder / PDFs")]
     end
-    
-    App -->|"Reads / Writes"| DB
-    App -->|"Searches Meanings & Abbreviations"| Search
-    App -->|"Creates Expirable Links"| Storage
+
+    Repos -->|"Reads / Writes"| DB
+    Services -->|"Searches Meanings & Abbreviations"| Search
+    Services -->|"Creates Expirable Links"| Storage
     Nginx -->|"Serves PDFs Statically"| Storage
-    
+
     %% Worker tasks
     Worker -->|"Persists Count Increments"| DB
     Worker -->|"Stores App Logs"| Logs

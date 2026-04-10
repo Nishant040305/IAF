@@ -112,14 +112,51 @@ npm run dev
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    Client[Client] --> Routes[Routes]
+    Routes --> Middleware[Middleware]
+    Middleware --> Controllers[Controllers]
+    Controllers --> Services[Services]
+    Services --> Repos[Repositories]
+    Repos --> DB[(Database)]
+
+    Controllers --> Queues[Queues]
+    Queues --> Workers[Workers]
+    Workers --> Repos
+
+    subgraph "PDF Upload Abstraction"
+        UploadRoute[PDF Upload Route] --> PdfController[PDF Controller]
+        PdfController --> Validate[File Validation]
+        Validate --> Clean[PDF Cleaning & Sanitization]
+        Clean --> Images[Thumbnail/Image Generation]
+        Images --> PdfService[PDF Service]
+        PdfService --> Repos
+    end
+
+    subgraph "PDF Read Abstraction"
+        ReadRoute[PDF Read Route] --> ReadController[PDF Controller]
+        ReadController --> Repos
+        ReadController --> AuditQueue[PDF View/Audit Queue]
+        AuditQueue --> Workers
+    end
+```
+
 ```
 src/
+├── cli/              # Admin/ops utilities (e.g., cleanup, scripts)
 ├── config/           # Environment, database, CORS configuration
-├── middleware/       # Auth, rate limiting, validation, error handling
-├── models/           # Mongoose schemas (User, Admin, PDF, Word, Abbreviation)
-├── routes/           # API route handlers
-├── services/         # Business logic (JWT, OTP, SMS, Audit)
-├── utils/            # Helpers (sanitize, response, file validation)
+├── controllers/      # Request handlers (thin orchestration layer)
+├── db/               # DB migrations and database helpers
+├── middleware/       # Auth, rate limiting, validation, encryption, error handling
+├── models/           # Schemas/entities (User, Admin, PDF, Word, Abbreviation)
+├── queues/           # Queue provider + logical queue routes
+├── repositories/     # Data access layer (e.g., Postgres/Mongo)
+├── routes/           # HTTP routing (maps endpoints -> controllers)
+├── services/         # Business logic (JWT, OTP, SMS, Audit, Thumbnails)
+├── utils/            # Helpers (sanitize, response, file validation, PDF tools)
+├── workers/          # Background consumers (audit, pdf views, etc.)
+├── cluster.js        # Process clustering/bootstrap
 └── server.js         # Main entry point
 ```
 
