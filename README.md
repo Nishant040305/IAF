@@ -85,18 +85,66 @@ This version is recommended for most deployments as it provides a balance betwee
 
 ---
 
-## Architecture
+## Current Architecture
 
-The system consists of:
+The backend infrastructure is built on a scalable, modular architecture incorporating several specialized layers for routing, caching, background processing, and storage. Below is the High-Level Design (HLD) illustrating these interactions:
 
-* Backend service handling API, validation, and security layers
-* Reverse proxy using Nginx for routing and caching
-* Redis for caching and session management
-* PostgreSQL for primary data storage
-* ClickHouse for analytics workloads
-* Elasticsearch for search capabilities
-* React-based admin dashboard
-* React Native mobile application
+```mermaid
+graph TD
+    %% Client interfaces
+    Client["Clients / Mobile App"] -->|"HTTPS Requests"| Nginx["Nginx Layer"]
+    CLI["CLI Tools"] -->|"HTTPS / Commands"| Nginx
+    
+    %% API Gateway Layer
+    subgraph GatewayLayer ["Gateway Layer"]
+        Nginx
+    end
+    Nginx -->|"Serves Static Files"| Admin["Admin Dashboard"]
+    Nginx -->|"Routes API / SSE Streams"| App["App Containers"]
+    
+    %% Service Layer
+    subgraph MainApplications ["Main Applications"]
+        App
+        Worker["Background Workers"]
+    end
+    
+    %% Caching Layer
+    subgraph CacheBlock ["Cache Block"]
+        Redis[("Redis")]
+        note1["Usage:<br/>- API Caching<br/>- Rate Limiting<br/>- Queues<br/>- SSE Pub/Sub"]
+        Redis -.- note1
+    end
+    App -->|"Pub/Sub & Caching"| Redis
+    Redis -->|"Consume Tasks"| Worker
+    
+    %% Storage & Persistence
+    subgraph DataStorageLayer ["Data & Storage Layer"]
+        DB[("PostgreSQL")]
+        Search[("Elasticsearch")]
+        Logs[("ClickHouse")]
+        Storage[("Upload Folder / PDFs")]
+    end
+    
+    App -->|"Reads / Writes"| DB
+    App -->|"Searches Meanings & Abbreviations"| Search
+    App -->|"Creates Expirable Links"| Storage
+    
+    %% Worker tasks
+    Worker -->|"Persists Count Increments"| DB
+    Worker -->|"Stores App Logs"| Logs
+```
+
+### System Components
+
+* **Nginx Layer**: Serves as the reverse proxy and load balancer. It handles routing to appropriate endpoints, serves the React-based admin dashboard seamlessly, and channels SSE (Server-Sent Events) to the API containers.
+* **App Containers**: Dedicated application servers handling core API orchestration. Responsible for processing frontend requests, interacting with data layers via caches, generating expirable links for secure PDF sharing, and broadcasting real-time SSE updates.
+* **Cache Block (Redis)**: A centralized tier optimizing app flow. It manages API caching to lower DB lookup latencies, maintains rate limiting controls against abuse, processes the Pub/Sub logic for SSE, and behaves as the standard queue for assigning tasks to workers.
+* **Elasticsearch**: Tailored explicitly for lighting-fast context-aware searches, particularly searching for word meanings and abbreviations.
+* **Workers**: Background processor modules designed to cleanly offload asynchronous tasks from the API layer. Key operations include pushing aggregate event logging to ClickHouse and managing delayed/sequential view-count increments onto Postgres reliably.
+* **PostgreSQL**: The normal, primary relational database. Source of truth for app objects, user configurations, and content metadata.
+* **ClickHouse**: Dedicated OLAP time-series datastore tuned for logging analytics.
+* **Upload Folder Storage**: Secure volume used for persistent storage of PDFs. These raw documents are strictly inaccessible from the web, and are delivered only via time-bound, expirable URLs created dynamically.
+* **CLI**: Companion terminal application allowing admin operations to occur alongside normal service functionality.
 
 ---
 
@@ -131,12 +179,10 @@ When security features are minimized:
 
 ## Setup
 
-```bash
-git clone https://github.com/Nishant040305/vayureader
-cd vayureader
-cp .env.example .env
-docker-compose up -d --build
-```
+1. Follow the instructions from bakendstartup.md
+2. Follow the instructions from frontendstartup.md
+
+
 
 Configuration is managed through environment variables.
 

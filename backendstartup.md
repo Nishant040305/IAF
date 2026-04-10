@@ -7,16 +7,18 @@ Quick reference for starting the VayuReader backend and admin dashboard.
 ## 1. Start Backend (Docker)
 
 ```bash
-cd VayuReader_Backend_v2
-docker-compose --profile dev up -d
+cd vayureader
+docker-compose up -d --build
 ```
 
 This starts:
 - `vayureader_api` - Backend API (Port 3000, proxied via Nginx)
 - `vayureader_gateway` - Nginx (Ports 80, 443)
-- `vayureader_db` - MongoDB
+- `vayureader_admin` - Admin Dashboard (Port 3001, proxied via Nginx)
 - `vayureader_cache` - Redis
-- `vayureader_sms` - OTP Simulator (Port 8000)
+- `vayureader_db` - PostgreSQL
+- `vayureader_search` - Elasticsearch
+- `vayureader_logs` - ClickHouse
 
 ### Check Status
 ```bash
@@ -31,18 +33,7 @@ docker-compose down
 
 ---
 
-## 2. Start Admin Dashboard
-
-```bash
-cd admin-dashboard
-PORT=3001 npm start
-```
-
-Opens at: **http://localhost:3001**
-
----
-
-## 3. Start Mobile App (Development)
+## 2. Start Mobile App (Development)
 
 ```bash
 cd VayuReader_Frontend
@@ -56,8 +47,7 @@ npm run android
 | Service | URL |
 |---------|-----|
 | Backend API | https://localhost |
-| Admin Dashboard | http://localhost:3001 |
-| SMS Simulator | http://localhost:8000 |
+| Admin Dashboard | https://localhost |
 
 ---
 
@@ -65,7 +55,7 @@ npm run android
 
 1. Generate SSL certs (one-time):
 ```bash
-cd VayuReader_Backend_v2
+cd 
 docker run --rm -v "$(pwd)/nginx/certs:/certs" alpine /bin/sh -c "apk add --no-cache openssl && \
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 -keyout /certs/server.key -out /certs/server.crt \
@@ -73,7 +63,12 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 -addext 'subjectAltName = DNS:localhost, IP:127.0.0.1'"
 ```
 
-2. Create Super Admin:
+2. Migrate Database:
+```bash
+docker-compose exec app npm run db:migrate
+```
+
+3. Create Super Admin:
 ```bash
 docker-compose exec app node scripts/seedAdmin.js "Admin" "9999999999" "Password123"
 ```
