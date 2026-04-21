@@ -159,9 +159,9 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // Handle unauthorized (401 only — session truly expired/invalid)
+    // Handle unauthorized
     const status = error?.response?.status;
-    if (status === 401) {
+    if (status === 401 || status === 403) {
       if (unauthorizedHandler) {
         await unauthorizedHandler();
       } else {
@@ -169,11 +169,6 @@ apiClient.interceptors.response.use(
         clearKeyCache();
       }
       router.replace('/auth/login');
-    }
-
-    // 403 = Forbidden (e.g. security setup required) — do NOT logout
-    if (status === 403) {
-      console.warn('[API] 403 Forbidden:', error?.response?.data?.message || 'Access denied');
     }
     return Promise.reject(error);
   }
