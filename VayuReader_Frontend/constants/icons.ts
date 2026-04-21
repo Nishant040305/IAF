@@ -2,7 +2,7 @@ import Acronyms from "@/assets/icons/Acronyms.png";
 import arrow from "@/assets/icons/arrow.png";
 import dict from "@/assets/icons/dict.png";
 import home from "@/assets/icons/home.png";
-import logo from "@/assets/icons/logo.png";
+import logo from "@/assets/icons/logo-v2.png";
 import person from "@/assets/icons/person.png";
 import play from "@/assets/icons/play.png";
 import save from "@/assets/icons/save.png";

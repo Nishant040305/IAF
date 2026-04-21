@@ -16,11 +16,11 @@ import {
   View,
 } from 'react-native';
 
+import AppLogo from '@/components/AppLogo';
 import SearchBar from '@/components/SearchBar';
 import { ListSkeleton } from '@/components/Skeleton';
 import EmptyState from '@/components/EmptyState';
 import { ABBR_BASE_URL } from '@/constants/config';
-import { icons } from '@/constants/icons';
 import { images } from '@/constants/images';
 import apiClient from '@/lib/apiClient';
 
@@ -171,10 +171,7 @@ export default function AbbreviationScreen() {
   return (
     <View className="flex-1 bg-black">
       <Image source={images.bg} className="absolute" />
-      <Image
-        source={icons.logo}
-        className="w-24 h-28 mt-14 mb-5 self-center"
-      />
+      <AppLogo />
 
       <View className="px-5 mb-3">
         <SearchBar

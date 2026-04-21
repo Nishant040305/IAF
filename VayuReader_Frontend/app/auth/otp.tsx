@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Image,
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
@@ -12,7 +11,7 @@ import {
   View,
 } from 'react-native';
 
-import { icons } from '@/constants/icons';
+import AppLogo from '@/components/AppLogo';
 import { images } from '@/constants/images';
 import { AUTH_BASE_URL } from '@/constants/config';
 import apiClient from '@/lib/apiClient';
@@ -178,7 +177,7 @@ const OtpScreen = () => {
       >
         <View className="flex-1 bg-black/65 px-6 justify-center mb-12">
           <View className="items-center mb-6">
-            <Image source={icons.logo} className="w-28 h-32" resizeMode="cover" />
+            <AppLogo variant="otp-screen" />
             <Text className="text-white text-2xl font-extrabold mt-4">Enter OTP</Text>
             <Text className="text-gray-300 mt-1">Sent to {phoneNumber || 'your phone'}</Text>
           </View>

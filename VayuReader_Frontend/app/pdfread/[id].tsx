@@ -30,18 +30,18 @@ const formatAccessedAt = (value: Date) => {
 };
 
 const buildWatermarkItems = (width: number, height: number) => {
-  const columns = 3;
-  const rows = 6;
-  const horizontalStep = width / columns;
+  const rows = 4;
   const verticalStep = height / rows;
   const items: { key: string; left: number; top: number }[] = [];
 
   for (let row = 0; row < rows; row += 1) {
+    const columns = row % 2 === 0 ? 1 : 2;
+
     for (let column = 0; column < columns; column += 1) {
-      const rowOffset = row % 2 === 0 ? 0 : horizontalStep * 0.35;
+      const centerX = width * ((column + 1) / (columns + 1));
       items.push({
         key: `${row}-${column}`,
-        left: column * horizontalStep + rowOffset - 24,
+        left: centerX - 130,
         top: row * verticalStep + verticalStep * 0.16,
       });
     }
@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontSize: 15,
     fontWeight: '700',
-    opacity: 0.26,
+    opacity: 0.15,
     transform: [{ rotate: '-24deg' }],
   },
 });
