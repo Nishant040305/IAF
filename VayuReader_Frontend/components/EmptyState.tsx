@@ -55,9 +55,9 @@ const EmptyState = ({ type, message, searchQuery }: EmptyStateProps) => {
 
             <Text style={styles.title}>{config.title}</Text>
 
-            {searchQuery && (
-                <Text style={styles.query}>"{searchQuery}"</Text>
-            )}
+            {searchQuery ? (
+                <Text style={styles.query}>{`"${searchQuery}"`}</Text>
+            ) : null}
 
             <Text style={styles.message}>
                 {message || config.defaultMessage}

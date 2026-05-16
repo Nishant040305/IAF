@@ -290,7 +290,7 @@ export default function Index() {
 
       {debouncedSearch && (
         <Text className="text-white text-lg font-bold mt-4 mb-4 px-2">
-          Search results for "{debouncedSearch}"
+          {`Search results for "${debouncedSearch}"`}
         </Text>
       )}
     </>

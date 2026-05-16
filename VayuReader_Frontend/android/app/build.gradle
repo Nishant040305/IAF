@@ -214,4 +214,7 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // On-device OCR for scanned PDF search (Android-only).
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }

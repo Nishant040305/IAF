@@ -24,6 +24,13 @@ cp .env.example .env
 npm run android
 ```
 
+## Scanned PDF Search (Android)
+
+Scanned PDFs have no embedded text, so the app uses **on-device OCR** (Android only) to enable in-PDF search + highlights.
+
+- Requires a native Android build (`npm run android` / `expo run:android`), not Expo Go.
+- OCR runs incrementally per session (no persistence): pages are OCR'd as needed when you search.
+
 ## Backend Connection
 
 Backend URLs are read from Expo public env vars in `constants/config.ts`.
