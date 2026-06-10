@@ -111,39 +111,76 @@ const getAllAbbreviations = async (req, res, next) => {
 };
 
 /**
- * Look up specific abbreviation.
- * Cached for 24 hours.
+ * Look up an abbreviation by path param.
+ *
+ * Behavior: fuzzy/partial search (Elasticsearch, with MongoDB regex fallback),
+ * preferring an exact case-insensitive match. Returns the single best match as
+ * a flat JSON object (no { success, data } envelope) so legacy mobile clients
+ * that read `response.data.abbreviation` directly continue to work.
+ *
+ * Cached for 24 hours under `abbr:lookup:<UPPER>`; invalidated by the
+ * existing `invalidateByPattern('abbr:*')` calls in cache.service.js.
  */
 const getAbbreviation = async (req, res, next) => {
     try {
         const abbr = req.params.abbr;
 
-        if (!abbr) {
+        if (!abbr || !abbr.trim()) {
             return response.badRequest(res, 'Abbreviation parameter is required');
         }
 
-        const cacheKey = `abbr:${abbr.toUpperCase()}`;
+        const trimmed = abbr.trim();
+        const upper = trimmed.toUpperCase();
+        const cacheKey = `abbr:lookup:${upper}`;
 
         // Check Redis cache first
         const cachedData = await redisClient.get(cacheKey);
         if (cachedData) {
-            return response.success(res, JSON.parse(cachedData));
+            return res.json(JSON.parse(cachedData));
         }
 
-        const result = await Abbreviation.findOne({
-            abbreviation: createExactMatchRegex(abbr)
-        }).lean();
+        let best = null;
 
-        if (!result) {
+        // 1) Try Elasticsearch partial/fuzzy search
+        try {
+            const esResults = await esSearchAbbreviations(trimmed, 10);
+            if (Array.isArray(esResults) && esResults.length > 0) {
+                best = esResults.find(r => (r.abbreviation || '').toUpperCase() === upper)
+                    || esResults[0];
+            }
+        } catch (esErr) {
+            console.warn('[ES] Abbreviation lookup search failed, falling back to Mongo:', esErr.message);
+        }
+
+        // 2) Fallback to MongoDB regex (handles ES being down or empty index)
+        if (!best) {
+            const safe = escapeRegex(trimmed);
+            best = await Abbreviation.findOne({
+                $or: [
+                    { abbreviation: { $regex: safe, $options: 'i' } },
+                    { fullForm: { $regex: safe, $options: 'i' } }
+                ]
+            })
+                .sort({ abbreviation: 1 })
+                .lean();
+        }
+
+        if (!best) {
             return response.notFound(res, 'Abbreviation not found');
         }
 
-        // Cache for 24 hours
-        await redisClient.set(cacheKey, JSON.stringify(result), {
+        // Flat payload — keeps mobile client (saved.tsx -> `res.data.abbreviation`) working.
+        const payload = {
+            _id: best._id,
+            abbreviation: best.abbreviation,
+            fullForm: best.fullForm
+        };
+
+        await redisClient.set(cacheKey, JSON.stringify(payload), {
             EX: CACHE_TTL.ABBREVIATION_LOOKUP
         });
 
-        response.success(res, result);
+        res.json(payload);
     } catch (error) {
         next(error);
     }
