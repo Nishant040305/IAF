@@ -22,7 +22,7 @@ RUN npm prune --production
 FROM node:20-alpine AS production
 
 # Install tini for signal handling and poppler-utils for PDF thumbnail generation
-RUN apk add --no-cache tini poppler-utils
+RUN apk add --no-cache --retries 5 tini poppler-utils || (apk update && apk add --no-cache tini poppler-utils)
 
 # Set working directory
 WORKDIR /usr/src/app
