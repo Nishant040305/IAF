@@ -185,7 +185,13 @@ export default function Index() {
     [allPdfs]
   );
 
-  const popularData = useMemo(() => allPdfs.slice(0, 10), [allPdfs]);
+  const popularData = useMemo(
+    () =>
+      [...allPdfs]
+        .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
+        .slice(0, 10),
+    [allPdfs]
+  );
 
   const categories = useMemo(
     () => Array.from(new Set(allPdfs.map(p => p.category))),
