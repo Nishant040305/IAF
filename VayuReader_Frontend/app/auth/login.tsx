@@ -90,7 +90,7 @@ const LoginScreen = () => {
             <View className="items-center mb-10">
               <Image source={icons.logo} className="w-28 h-28" resizeMode="contain" />
               <Text className="text-white text-3xl font-extrabold mt-6">Welcome</Text>
-              <Text className="text-gray-300 mt-2">Gateway to Documents, Dictionary, Abbreviation</Text>
+              <Text className="text-gray-300 mt-2">Gateway to Documents</Text>
             </View>
 
             <View className="gap-4 mb-10">

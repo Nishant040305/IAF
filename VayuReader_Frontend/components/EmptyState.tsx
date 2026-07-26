@@ -3,7 +3,7 @@ import { Image, Text, View, StyleSheet } from 'react-native';
 import { icons } from '@/constants/icons';
 
 interface EmptyStateProps {
-    type: 'search' | 'pdf' | 'dictionary' | 'abbreviation' | 'error';
+    type: 'search' | 'pdf' | 'error';
     message?: string;
     searchQuery?: string;
 }
@@ -18,16 +18,6 @@ const emptyStateConfig = {
         icon: icons.logo,
         title: 'No PDFs Available',
         defaultMessage: 'PDFs will appear here once uploaded',
-    },
-    dictionary: {
-        icon: icons.search,
-        title: 'Word Not Found',
-        defaultMessage: 'Try searching for a different word',
-    },
-    abbreviation: {
-        icon: icons.search,
-        title: 'No Abbreviations',
-        defaultMessage: 'Abbreviations will appear here',
     },
     error: {
         icon: icons.logo,

@@ -76,7 +76,7 @@ export const PDFCardSkeleton = ({ cardWidth = 100 }: { cardWidth?: number }) => 
 };
 
 /**
- * Abbreviation/Word Item Skeleton
+ * Word Item Skeleton
  */
 export const ListItemSkeleton = () => {
     return (

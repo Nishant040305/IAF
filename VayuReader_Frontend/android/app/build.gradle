@@ -69,13 +69,6 @@ react {
 def enableProguardInReleaseBuilds = (findProperty('android.enableProguardInReleaseBuilds') ?: false).toBoolean()
 
 /**
- * Set this to true to create four separate APKs instead of one,
- * one for each native architecture. This is useful if you don't
- * use App Bundles (AAB) and want to reduce the size of the APK.
- */
-def enableSeparateBuildPerCPUArchitecture = (findProperty('react-native.enableSeparateBuildPerCPUArchitecture') ?: false).toBoolean()
-
-/**
  * The preferred build flavor of JavaScriptCore (JSC)
  *
  * For example, to use the international variant, you can use:
@@ -89,19 +82,31 @@ def enableSeparateBuildPerCPUArchitecture = (findProperty('react-native.enableSe
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
+// @generated begin react-native-pdf-packaging-options - expo prebuild (DO NOT MODIFY) sync-e288c3c5efbb1ef5e1a1959a848260c36558a381
+
+    packagingOptions {
+        pickFirst 'lib/x86/libc++_shared.so'
+        pickFirst 'lib/x86_64/libjsc.so'
+        pickFirst 'lib/arm64-v8a/libjsc.so'
+        pickFirst 'lib/arm64-v8a/libc++_shared.so'
+        pickFirst 'lib/x86_64/libc++_shared.so'
+        pickFirst 'lib/armeabi-v7a/libc++_shared.so'
+    }
+
+// @generated end react-native-pdf-packaging-options
     ndkVersion rootProject.ext.ndkVersion
+
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.vayureader'               
+    namespace 'com.vayureader'
     defaultConfig {
-        applicationId 'com.vayureader'       
-        minSdkVersion 26
+        applicationId 'com.vayureader'
+        minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0"                    
+        versionName "1.0.0"
     }
-
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -109,31 +114,21 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
-        release {
-            def storeFileProp = project.findProperty("MYAPP_UPLOAD_STORE_FILE")
-            storeFile storeFileProp ? file(storeFileProp) : null
-            storePassword project.findProperty("MYAPP_UPLOAD_STORE_PASSWORD")
-            keyAlias project.findProperty("MYAPP_UPLOAD_KEY_ALIAS")
-            keyPassword project.findProperty("MYAPP_UPLOAD_KEY_PASSWORD")
-        }
     }
-
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // ✅ Use the real release keystore (stop using debug one)
-            signingConfig signingConfigs.release
-
-            // Keep your existing optimizations
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
+            signingConfig signingConfigs.debug
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
         }
     }
-
     packagingOptions {
         jniLibs {
             useLegacyPackaging (findProperty('expo.useLegacyPackaging')?.toBoolean() ?: false)
@@ -141,29 +136,6 @@ android {
     }
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
-    }
-
-    splits {
-        abi {
-            reset()
-            enable enableSeparateBuildPerCPUArchitecture
-            universalApk false  // If true, also generate a universal APK
-            include (*project.findProperty("reactNativeArchitectures").split(","))
-        }
-    }
-
-    // applicationVariants are e.g. debug, release
-    applicationVariants.all { variant ->
-        variant.outputs.each { output ->
-            // For each separate APK per architecture, set a unique version code as described here:
-            // https://developer.android.com/studio/build/configure-apk-splits.html
-            def versionCodes = ["armeabi-v7a": 1, "x86": 2, "arm64-v8a": 3, "x86_64": 4]
-            def abi = output.getFilter(com.android.build.OutputFile.ABI)
-            if (abi != null) {  // null for the universal-debug, universal-release variants
-                output.versionCodeOverride =
-                        defaultConfig.versionCode * 1000 + versionCodes.get(abi)
-            }
-        }
     }
 }
 

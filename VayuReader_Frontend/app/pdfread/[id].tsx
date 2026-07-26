@@ -1,5 +1,5 @@
 import { useNavigation } from '@react-navigation/native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Pdf from 'react-native-pdf';
@@ -131,16 +131,6 @@ export default function PdfDetails() {
   };
 
   return (
-    <>
-      <Stack>
-        <Stack.Screen
-          options={{
-            title: 'PDF Viewer',
-            headerBackTitle: 'Back',
-            headerTitleAlign: 'center',
-          }}
-        />
-      </Stack>
       <View style={styles.container}>
         <Pdf
           source={pdfSource}
@@ -167,7 +157,6 @@ export default function PdfDetails() {
           ))}
         </View>
       </View>
-    </>
   );
 }
 
