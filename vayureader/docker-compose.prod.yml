@@ -25,19 +25,6 @@ services:
     networks:
       - backend-network
 
-  elasticsearch:
-    image: elasticsearch:8.11.0
-    container_name: vayureader_search
-    restart: unless-stopped
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms256m -Xmx256m
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    networks:
-      - backend-network
-
   app:
     image: vayureader-app:latest
     container_name: vayureader_api
@@ -49,7 +36,6 @@ services:
     depends_on:
       - mongo
       - redis
-      - elasticsearch
     networks:
       - backend-network
 
@@ -76,4 +62,3 @@ networks:
 
 volumes:
   mongo-data:
-  es-data:

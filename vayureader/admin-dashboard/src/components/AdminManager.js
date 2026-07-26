@@ -3,8 +3,6 @@ import api from '../utils/api';
 
 const AVAILABLE_PERMISSIONS = [
     { key: 'manage_pdfs', label: '📄 Manage PDFs', description: 'Upload, edit, delete PDFs' },
-    { key: 'manage_dictionary', label: '📘 Manage Dictionary', description: 'Add, edit, delete words' },
-    { key: 'manage_abbreviations', label: '🔤 Manage Abbreviations', description: 'Add, edit, delete abbreviations' },
     { key: 'manage_admins', label: '👥 Manage Admins', description: 'Create, edit, delete sub-admins' },
     { key: 'view_audit', label: '📋 View Admin Audit', description: 'View admin activity logs' },
     { key: 'view_user_audit', label: '👁️ View User Audit', description: 'View user activity logs' },

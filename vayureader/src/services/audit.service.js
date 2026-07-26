@@ -13,8 +13,6 @@ const AuditLog = require('../models/AuditLog');
  */
 const RESOURCE_TYPES = {
     PDF: 'PDF',
-    DICTIONARY: 'DICTIONARY_WORD',
-    ABBREVIATION: 'ABBREVIATION',
     ADMIN: 'ADMIN'
 };
 

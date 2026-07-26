@@ -25,21 +25,6 @@ const optimizeDatabase = async () => {
         // =====================================================================
         console.log('\n📊 Checking and creating indexes...\n');
 
-        // Dictionary (Words) collection indexes
-        const wordsCollection = db.collection('words');
-        await wordsCollection.createIndex({ word: 1 }, { unique: true, background: true });
-        await wordsCollection.createIndex({ word: 'text' }, { background: true });
-        console.log('  ✅ Words indexes verified');
-
-        // Abbreviations collection indexes
-        const abbrCollection = db.collection('abbreviations');
-        await abbrCollection.createIndex({ abbreviation: 1 }, { unique: true, background: true });
-        await abbrCollection.createIndex(
-            { abbreviation: 'text', fullForm: 'text' },
-            { background: true }
-        );
-        console.log('  ✅ Abbreviations indexes verified');
-
         // PDF Documents collection indexes
         const pdfsCollection = db.collection('pdfdocuments');
         await pdfsCollection.createIndex({ category: 1 }, { background: true });
@@ -53,7 +38,7 @@ const optimizeDatabase = async () => {
         // =====================================================================
         console.log('\n🗜️  Running collection compaction...\n');
 
-        const collections = ['words', 'abbreviations', 'pdfdocuments'];
+        const collections = ['pdfdocuments'];
         for (const collName of collections) {
             try {
                 await db.command({ compact: collName });

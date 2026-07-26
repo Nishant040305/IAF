@@ -103,8 +103,6 @@ export default function AdminAuditLogs({ onNavigate }) {
                 >
                     <option value="">All Resources</option>
                     <option value="PDF">PDF</option>
-                    <option value="DICTIONARY_WORD">Dictionary</option>
-                    <option value="ABBREVIATION">Abbreviation</option>
                     <option value="ADMIN">Admin</option>
                 </select>
 

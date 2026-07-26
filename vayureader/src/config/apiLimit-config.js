@@ -44,22 +44,6 @@ const apiLimitConfig = {
         }
     },
 
-    // Critical operations
-    uploads: {
-        dictionary: {
-            prefix: 'upload-dict',
-            windowMs: 60 * 60 * 1000, // 1 hour
-            max: 10,
-            message: 'Upload limit exceeded'
-        },
-        abbreviation: {
-            prefix: 'upload-abbr',
-            windowMs: 60 * 60 * 1000, // 1 hour
-            max: 10,
-            message: 'Upload limit exceeded'
-        }
-    },
-
     // Search operations (often higher volume allowed, or tighter to prevent scraping)
     search: {
         prefix: 'search',

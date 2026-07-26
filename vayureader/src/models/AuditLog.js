@@ -25,7 +25,7 @@ const auditLogSchema = new mongoose.Schema(
         resourceType: {
             type: String,
             required: true,
-            enum: ['PDF', 'DICTIONARY_WORD', 'ABBREVIATION', 'ADMIN']
+            enum: ['PDF', 'ADMIN']
         },
 
         /**

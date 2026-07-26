@@ -12,49 +12,9 @@ const { redisClient } = require('../config/redis');
  * Cache key patterns for different resources.
  */
 const CACHE_PATTERNS = {
-    WORD: 'word:*',
-    ABBREVIATION: 'abbr:*',
     PDF_CATEGORIES: 'pdf:categories',
     PDF_LIST: 'pdf:list:*',
     PDF_SEARCH: 'pdf:search:*'
-};
-
-/**
- * Invalidate cache for a specific word.
- * @param {string} word - The word to invalidate
- */
-const invalidateWord = async (word) => {
-    try {
-        const cacheKey = `word:${word.toUpperCase()}`;
-        await redisClient.del(cacheKey);
-        // Also invalidate the words preview list
-        await redisClient.del('words:preview:100');
-        // Invalidate paginated dictionary list caches
-        await invalidateByPattern('words:all:*');
-        // Invalidate search caches (deleted/updated word may appear in search results)
-        await invalidateByPattern('word:search:*');
-    } catch (error) {
-        console.error('Cache invalidation error (word):', error.message);
-    }
-};
-
-/**
- * Invalidate cache for a specific abbreviation.
- * @param {string} abbr - The abbreviation to invalidate
- */
-const invalidateAbbreviation = async (abbr) => {
-    try {
-        const cacheKey = `abbr:${abbr.toUpperCase()}`;
-        await redisClient.del(cacheKey);
-        // Also invalidate the all-abbreviations cache
-        await redisClient.del('abbr:all');
-        // Invalidate search caches (using pattern)
-        await invalidateByPattern('abbr:search:*');
-        // Invalidate paginated/list abbreviation caches (if enabled)
-        await invalidateByPattern('abbr:list:*');
-    } catch (error) {
-        console.error('Cache invalidation error (abbreviation):', error.message);
-    }
 };
 
 /**
@@ -73,7 +33,7 @@ const invalidatePdfCaches = async () => {
 /**
  * Invalidate all caches matching a pattern.
  * Uses SCAN for production-safe iteration.
- * @param {string} pattern - Redis key pattern (e.g., 'abbr:*')
+ * @param {string} pattern - Redis key pattern
  */
 const invalidateByPattern = async (pattern) => {
     try {
@@ -91,32 +51,6 @@ const invalidateByPattern = async (pattern) => {
     } catch (error) {
         console.error(`Cache pattern invalidation error (${pattern}):`, error.message);
         // Don't throw - cache errors shouldn't break the main operation
-    }
-};
-
-/**
- * Invalidate all dictionary caches (use after bulk upload).
- */
-const invalidateAllDictionaryCaches = async () => {
-    try {
-        await invalidateByPattern('word:*');
-        await redisClient.del('words:preview:100');
-        await invalidateByPattern('words:all:*');
-        await invalidateByPattern('word:search:*');
-    } catch (error) {
-        console.error('Cache invalidation error (all dictionary):', error.message);
-    }
-};
-
-/**
- * Invalidate all abbreviation caches (use after bulk upload).
- */
-const invalidateAllAbbreviationCaches = async () => {
-    try {
-        await invalidateByPattern('abbr:*');
-        await invalidateByPattern('abbr:list:*');
-    } catch (error) {
-        console.error('Cache invalidation error (all abbreviation):', error.message);
     }
 };
 
@@ -140,11 +74,7 @@ const getCacheStats = async () => {
 
 module.exports = {
     CACHE_PATTERNS,
-    invalidateWord,
-    invalidateAbbreviation,
     invalidatePdfCaches,
     invalidateByPattern,
-    invalidateAllDictionaryCaches,
-    invalidateAllAbbreviationCaches,
     getCacheStats
 };

@@ -30,8 +30,6 @@ const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
 const auditRoutes = require('./routes/audit.routes');
 const pdfRoutes = require('./routes/pdf.routes');
-const dictionaryRoutes = require('./routes/dictionary.routes');
-const abbreviationRoutes = require('./routes/abbreviation.routes');
 const sseRoutes = require('./routes/sse.routes');
 const userAuditRoutes = require('./routes/userAudit.routes');
 const recoveryRoutes = require('./routes/recovery.routes');
@@ -95,21 +93,13 @@ app.options('*', cors(corsOptions));
 app.use(cookieParser());
 
 // Body parsing configuration (DoS Protection)
-// 1. Allow 100MB for specific bulk upload routes
-const bulkUploadRoutes = [
-    '/api/dictionary/upload',
-    '/api/abbreviations/bulk'
-];
-app.use(bulkUploadRoutes, express.json({ limit: '100mb' }));
-app.use(bulkUploadRoutes, express.text({ limit: '100mb' }));
-
-// 2. Enforce 1MB limit for all other JSON requests
+// 1. Enforce 1MB limit for all JSON requests
 app.use(express.json({ limit: '1mb' }));
 
-// 3. Parse text/plain bodies (E2EE encrypted payloads arrive as raw text)
+// 2. Parse text/plain bodies (E2EE encrypted payloads arrive as raw text)
 app.use(express.text({ limit: '1mb' }));
 
-// 4. standard URL-encoded limit
+// 3. standard URL-encoded limit
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Trim whitespace from string fields
@@ -136,11 +126,6 @@ app.use('/api', (req, res, next) => {
     if (req.path === '/events' || req.url.startsWith('/events')) {
         return next();
     }
-    // Give bulk uploads a full 1-minute timeout
-    if (req.path === '/dictionary/upload' || req.path === '/abbreviations/bulk') {
-        return requestTimeout(60000)(req, res, next);
-    }
-
     requestTimeout(30000)(req, res, next);
 });
 
@@ -170,8 +155,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/pdfs', pdfRoutes);
-app.use('/api/dictionary', dictionaryRoutes);
-app.use('/api/abbreviations', abbreviationRoutes);
 app.use('/api/events', sseRoutes);
 app.use('/api/user-audit', userAuditRoutes);
 app.use('/api/recovery', recoveryRoutes);
@@ -189,8 +172,6 @@ app.get('/', (req, res) => {
             admin: '/api/admin',
             audit: '/api/audit',
             pdfs: '/api/pdfs',
-            dictionary: '/api/dictionary',
-            abbreviations: '/api/abbreviations',
             events: '/api/events',
             userAudit: '/api/user-audit',
             recovery: '/api/recovery',
@@ -237,8 +218,6 @@ const startServer = async () => {
             console.log('║    /api/admin        - Admin authentication            ║');
             console.log('║    /api/audit        - Audit logs                      ║');
             console.log('║    /api/pdfs         - PDF documents                   ║');
-            console.log('║    /api/dictionary   - Dictionary words                ║');
-            console.log('║    /api/abbreviations - Abbreviations                  ║');
             console.log('║    /api/user-audit   - User audit logs                 ║');
             console.log('║    /api/recovery     - Password recovery               ║');
             console.log('╚════════════════════════════════════════════════════════╝');

@@ -24,7 +24,7 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;       // 96-bit IV for GCM (NIST recommended)
 const TAG_LENGTH = 16;      // 128-bit auth tag
 const KEY_LENGTH = 32;      // 256-bit key
-const HKDF_SALT = 'vayureader-e2ee-v1';  // Static salt for HKDF domain separation
+const HKDF_SALT = 'intshorts-e2ee-v1';  // Static salt for HKDF domain separation
 const HKDF_INFO = 'api-payload-encryption';
 
 // =============================================================================

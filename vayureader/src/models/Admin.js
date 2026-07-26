@@ -14,8 +14,6 @@ const mongoose = require('mongoose');
  */
 const PERMISSIONS = [
     'manage_pdfs',
-    'manage_dictionary',
-    'manage_abbreviations',
     'manage_admins',
     'view_audit',
     'view_user_audit'

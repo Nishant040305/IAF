@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Sidebar from './components/Sidebar';
 import PdfManager from './components/PdfManager';
-import DictionaryManager from './components/DictionaryUploader';
-import AbbreviationUploader from './components/AbbreviationUploader';
 import AdminManager from './components/AdminManager';
 import AdminAuditLogs from './components/AdminAuditLogs';
 import UserAuditLogs from './components/UserAuditLogs';
@@ -27,8 +25,6 @@ export default function Dashboard({ user, permissions = [], onLogout }) {
   useEffect(() => {
     const canAccessCurrentView = (
       view === 'pdf' ||
-      view === 'dictionary' ||
-      view === 'abbreviation' ||
       (view === 'admins' && permissions.includes('manage_admins')) ||
       (view === 'adminAudit' && permissions.includes('view_audit')) ||
       (view === 'userAudit' && permissions.includes('view_user_audit'))
@@ -91,10 +87,6 @@ export default function Dashboard({ user, permissions = [], onLogout }) {
           onClearTarget={() => setPdfToHighlight(null)}
           permissions={permissions}
         />;
-      case 'dictionary':
-        return <DictionaryManager permissions={permissions} />;
-      case 'abbreviation':
-        return <AbbreviationUploader permissions={permissions} />;
       case 'admins':
         return permissions.includes('manage_admins') ? <AdminManager /> : <NoAccess />;
       case 'adminAudit':
@@ -109,8 +101,6 @@ export default function Dashboard({ user, permissions = [], onLogout }) {
   const getTitle = () => {
     const titles = {
       pdf: 'PDF Manager',
-      dictionary: 'Dictionary',
-      abbreviation: 'Abbreviations',
       admins: 'Admin Management',
       adminAudit: 'Admin Audit Logs',
       userAudit: 'User Activity Logs'

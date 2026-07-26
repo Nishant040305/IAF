@@ -2,8 +2,6 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileText,
-    Book,
-    Type,
     Users,
     ClipboardList,
     Activity,
@@ -16,8 +14,6 @@ import './Sidebar.css';
 
 const MENU_ITEMS = [
     { key: 'pdf', label: 'PDF Manager', icon: FileText },
-    { key: 'dictionary', label: 'Dictionary', icon: Book },
-    { key: 'abbreviation', label: 'Abbreviations', icon: Type },
     { key: 'admins', label: 'Admins', icon: Users, permission: 'manage_admins' },
     { key: 'adminAudit', label: 'Admin Audit', icon: ClipboardList, permission: 'view_audit' },
     { key: 'userAudit', label: 'User Audit', icon: Activity, permission: 'view_user_audit' },
