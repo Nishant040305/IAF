@@ -1,4 +1,4 @@
-package com.vayureader
+package com.intshorts
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

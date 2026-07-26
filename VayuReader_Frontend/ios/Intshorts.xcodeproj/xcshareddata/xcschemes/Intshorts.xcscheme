@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "VayuReader.app"
-               BlueprintName = "VayuReader"
-               ReferencedContainer = "container:VayuReader.xcodeproj">
+               BuildableName = "Intshorts.app"
+               BlueprintName = "Intshorts"
+               ReferencedContainer = "container:Intshorts.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "VayuReaderTests.xctest"
-               BlueprintName = "VayuReaderTests"
-               ReferencedContainer = "container:VayuReader.xcodeproj">
+               BuildableName = "IntshortsTests.xctest"
+               BlueprintName = "IntshortsTests"
+               ReferencedContainer = "container:Intshorts.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "VayuReader.app"
-            BlueprintName = "VayuReader"
-            ReferencedContainer = "container:VayuReader.xcodeproj">
+            BuildableName = "Intshorts.app"
+            BlueprintName = "Intshorts"
+            ReferencedContainer = "container:Intshorts.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "VayuReader.app"
-            BlueprintName = "VayuReader"
-            ReferencedContainer = "container:VayuReader.xcodeproj">
+            BuildableName = "Intshorts.app"
+            BlueprintName = "Intshorts"
+            ReferencedContainer = "container:Intshorts.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

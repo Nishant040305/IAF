@@ -1,4 +1,4 @@
-package com.vayureader
+package com.intshorts
 
 import android.app.Application
 import android.content.res.Configuration

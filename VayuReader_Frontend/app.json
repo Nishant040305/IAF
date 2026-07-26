@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "VayuReader",
-    "slug": "VayuReader",
+    "name": "Intshorts",
+    "slug": "Intshorts",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icons/logo-v3-adaptive.png",
-    "scheme": "VayuReader",
+    "scheme": "Intshorts",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vayureader"
+      "bundleIdentifier": "com.intshorts"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +19,7 @@
       },
       "edgeToEdgeEnabled": true,
       "usesCleartextTraffic": true,
-      "package": "com.vayureader",
+      "package": "com.intshorts",
       "permissions": [
         "INTERNET",
         "android.permission.READ_EXTERNAL_STORAGE",

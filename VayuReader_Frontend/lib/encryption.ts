@@ -4,7 +4,7 @@
  * Identical key derivation as server (encryption.service.js) and
  * admin dashboard (encryption.js). All three sides independently
  * compute the same AES-256-GCM key from:
- *   HKDF(salt="vayureader-e2ee-v1", IKM="${id}:${contact}:${tokenVersion}")
+ *   HKDF(salt="intshorts-e2ee-v1", IKM="${id}:${contact}:${tokenVersion}")
  *
  * Zero external dependencies — uses pure-JS SHA-256, HMAC, AES-GCM,
  * with WebCrypto fallback when available.
@@ -14,7 +14,7 @@
 // CONSTANTS — must match server encryption.service.js exactly
 // =============================================================================
 
-const HKDF_SALT = 'vayureader-e2ee-v1';
+const HKDF_SALT = 'intshorts-e2ee-v1';
 const HKDF_INFO = 'api-payload-encryption';
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;

@@ -1,6 +1,6 @@
-# VayuReader Frontend
+# Intshorts Frontend
 
-Expo + React Native app for VayuReader.
+Expo + React Native app for Intshorts.
 
 ## Setup
 
