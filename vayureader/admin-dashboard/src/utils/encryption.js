@@ -12,7 +12,7 @@
 // CONSTANTS — must exactly match server's encryption.service.js
 // =============================================================================
 
-const HKDF_SALT = 'vayureader-e2ee-v1';
+const HKDF_SALT = 'intshorts-e2ee-v1';
 const HKDF_INFO = 'api-payload-encryption';
 const IV_LENGTH = 12;   // 96-bit IV for GCM
 const TAG_LENGTH = 16;  // 128-bit auth tag
